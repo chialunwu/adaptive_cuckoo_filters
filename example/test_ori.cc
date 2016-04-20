@@ -1,5 +1,6 @@
 /* -*- Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 #include "cuckoofilter.h"
+#include "hash_functions.h"
 
 #include <cassert>
 #include <cmath>
@@ -12,12 +13,15 @@
 using cuckoofilter::CuckooFilter;
 
 int main(int argc, char** argv) {
-    size_t total_items  = 10000000;
+    size_t total_items  = 1000000;
+    size_t sht_max_buckets = 0;
 
     // Timing
     struct  timeval start;
     struct  timeval end;
     unsigned  long insert_t=0, lookup_t=0;
+
+    uint32_t hash1=0;
 
     // Create a cuckoo filter where each item is of type size_t and
     // use 12 bits for each item:
@@ -28,12 +32,20 @@ int main(int argc, char** argv) {
     //   CuckooFilter<size_t, 13, cuckoofilter::PackedTable> filter(total_items);
 
     CuckooFilter<size_t, 12> filter(total_items);
+    // Small hash table storing true negative caused by false positive
+    int *sht;
+    if(sht_max_buckets > 0)
+        sht = new int[sht_max_buckets];
 
     // Insert items to this cuckoo filter
     size_t num_inserted = 0;
     gettimeofday(&start,NULL);
     for (size_t i = 0; i < total_items; i++, num_inserted++) {
-        if (filter.Add(i) != cuckoofilter::Ok) {
+	size_t index;
+	uint32_t tag;
+
+	filter.GenerateIndexTagHash(i, &index, &tag);
+        if (filter.Add(i, index, tag) != cuckoofilter::Ok) {
             break;
         }
     }
@@ -49,11 +61,41 @@ int main(int argc, char** argv) {
     // Check non-existing items, a few false positives expected
     size_t total_queries = 0;
     size_t false_queries = 0;
+    size_t target;
     gettimeofday(&start,NULL);
     for (size_t i = total_items; i < 2 * total_items; i++) {
-        if (filter.Contain(i) == cuckoofilter::Ok) {
+	size_t index;
+	uint32_t tag;
+
+	/*if(sht_max_buckets > 0) {
+	    MurmurHash3_x86_32(&i, 256, 1384975, &hash1);
+	    hash1 = hash1 % sht_max_buckets;
+	}*/
+
+	target = i;//1999461;
+	if(sht_max_buckets > 0){
+    	    filter.GenerateIndexTagHash(target, &index, &tag);
+	    hash1 = index % sht_max_buckets;
+
+	    if(sht[hash1] != target){
+		if (filter.Contain(target, index, tag) == cuckoofilter::Ok) {
+		    false_queries++;
+		    if(sht_max_buckets > 0)
+			sht[hash1] = target;
+		}
+	    }
+	}else{
+		// fp: 1999461
+                if (filter.Contain(target) == cuckoofilter::Ok) {
+		    //std::cout << i << std::endl;
+                    false_queries++;
+                }
+	}
+
+        /*if (filter.Contain(i) == cuckoofilter::Ok) {
             false_queries++;
-        }
+        }*/
+
         total_queries++;
     }
     gettimeofday(&end,NULL);

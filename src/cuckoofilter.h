@@ -47,6 +47,7 @@ namespace cuckoofilter {
 
         VictimCache victim_;
 
+public:
         inline size_t IndexHash(uint32_t hv) const {
             return hv % table_->num_buckets;
         }
@@ -89,7 +90,7 @@ namespace cuckoofilter {
             return 8.0 * table_->SizeInBytes() / Size();
         }
 
-    public:
+//    public:
         explicit CuckooFilter(const size_t max_num_keys): num_items_(0) {
             size_t assoc = 4;
             size_t num_buckets = upperpower2(max_num_keys / assoc);
@@ -108,9 +109,12 @@ namespace cuckoofilter {
 
         // Add an item to the filter.
         Status Add(const ItemType& item);
+        Status Add(const ItemType& item, size_t i, uint32_t tag);
+
 
         // Report if the item is inserted, with false positive rate.
         Status Contain(const ItemType& item) const;
+        Status Contain(const ItemType& item, size_t i, uint32_t tag) const;
 
         // Delete an key from the filter
         Status Delete(const ItemType& item);
@@ -141,6 +145,18 @@ namespace cuckoofilter {
 
         GenerateIndexTagHash(item, &i, &tag);
 	//std::cout << "key:" << item << " i:" << i << " tag:" << tag << std::endl;
+        return AddImpl(i, tag);
+    }
+
+    template <typename ItemType, size_t bits_per_item,
+              template<size_t> class TableType>
+    Status
+    CuckooFilter<ItemType, bits_per_item, TableType>::Add(
+            const ItemType& item, size_t i, uint32_t tag) {
+        if (victim_.used) {
+            return NotEnoughSpace;
+        }
+        //std::cout << "key:" << item << " i:" << i << " tag:" << tag << std::endl;
         return AddImpl(i, tag);
     }
 
@@ -198,6 +214,32 @@ namespace cuckoofilter {
             return NotFound;
         }
     }
+
+    template <typename ItemType,
+              size_t bits_per_item,
+              template<size_t> class TableType>
+    Status
+    CuckooFilter<ItemType, bits_per_item, TableType>::Contain(
+            const ItemType& key, size_t i, uint32_t tag) const {
+        bool found = false;
+        size_t i2;
+
+	//std::cout << "key:" << key << " i:" << i1 << " tag:" << tag << std::endl;
+
+        i2 = AltIndex(i, tag);
+
+        assert(i == AltIndex(i2, tag));
+
+        found = victim_.used && (tag == victim_.tag) && 
+            (i == victim_.index || i2 == victim_.index);
+
+        if (found || table_->FindTagInBuckets(i, i2, tag)) {
+            return Ok;
+        } else {
+            return NotFound;
+        }
+    }
+
 
     template <typename ItemType,
               size_t bits_per_item,
