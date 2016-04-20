@@ -140,6 +140,7 @@ namespace cuckoofilter {
         }
 
         GenerateIndexTagHash(item, &i, &tag);
+	//std::cout << "key:" << item << " i:" << i << " tag:" << tag << std::endl;
         return AddImpl(i, tag);
     }
 
@@ -182,6 +183,8 @@ namespace cuckoofilter {
         uint32_t tag;
 
         GenerateIndexTagHash(key, &i1, &tag);
+	//std::cout << "key:" << key << " i:" << i1 << " tag:" << tag << std::endl;
+
         i2 = AltIndex(i1, tag);
 
         assert(i1 == AltIndex(i2, tag));

@@ -9,3 +9,10 @@
 *.o
 *.so
 test
+
+*.swp
+
+test_big_cf
+test_busc
+test_ori
+test_split_cf_adaptive
