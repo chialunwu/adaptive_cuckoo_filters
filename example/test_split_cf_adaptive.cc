@@ -37,8 +37,9 @@ vector<string> split(const string &s, char delim) {
 int main(int argc, char** argv) {
     size_t max_blocks = 20000;
     size_t sht_max_buckets = 1000;
+    size_t single_cf_size = 100;
 
-    bool adaptive = true;
+    bool adaptive = false;
     // Create a cuckoo filter where each item is of type size_t and
     // use 12 bits for each item:
     //    CuckooFilter<size_t, 12> filter(total_items);
@@ -52,6 +53,8 @@ int main(int argc, char** argv) {
     map<string, int>::iterator iter;    
    
     CuckooFilter<char[256], 8> **filter = new CuckooFilter<char[256], 8>*[max_blocks];
+    CuckooFilter<char[256], 8> dummy_filter(single_cf_size);
+
 
     // Small hash table storing true negative caused by false positive
     string *sht = new string[sht_max_buckets];
@@ -59,7 +62,8 @@ int main(int argc, char** argv) {
     ifstream infile(argv[1]);
     string line;
 
-    uint32_t hash1=0;
+    uint32_t murhash[4];
+    uint32_t hash1;
     uint32_t t_hash1=0;
 
     size_t num_inserted = 0;
@@ -93,18 +97,28 @@ int main(int argc, char** argv) {
 		
 		strcpy(str, record.c_str());
 		if(mapping_table.find(record) == mapping_table.end()){
+			size_t index, raw_index;
+			uint32_t tag;
+
 			mapping_table[record] = 1;
 
 			gettimeofday(&start,NULL);
-			MurmurHash3_x86_32(str, 256, 1384975, &hash1);   // Computed in mapping table
-			hash1 = hash1 % max_blocks;
+			
+			//MurmurHash3_x86_32(str, 256, 1384975, &hash1);
+			//hash1 = hash1 % max_blocks;
+
+			//MurmurHash3_x86_128(str, 256, 1384975, murhash);   // Computed in mapping table
+			//hash1 = murhash[0] % max_blocks;
+
+			dummy_filter.GenerateIndexTagHash(str, &raw_index, &index, &tag);
+			hash1 = raw_index % max_blocks;
 			//cout << type << ' ' << record << endl;
 			if(!filter[hash1]){
-			    filter[hash1] = new CuckooFilter<char[256], 8> (100);
+			    filter[hash1] = new CuckooFilter<char[256], 8> (single_cf_size);
 			    filter_size += filter[hash1]->SizeInBytes();
 			    filter_count ++;
 			} 
-			if (filter[hash1]->Add(str) != cuckoofilter::Ok) {
+			if (filter[hash1]->Add(str, index, tag) != cuckoofilter::Ok) {
 			     cout << "Fail" << endl;
 			     break;
 			}
@@ -122,8 +136,18 @@ int main(int argc, char** argv) {
 		if(record.length() < 256){
 		    strcpy(str, record.c_str());
 		    if(mapping_table.find(record) == mapping_table.end()){
+			size_t index, raw_index;
+			uint32_t tag;
+
 			gettimeofday(&start,NULL);
-			MurmurHash3_x86_32(str, 256, 1384975, &hash1);	// Computed in mapping table
+			
+			//MurmurHash3_x86_32(str, 256, 1384975, &hash1);
+
+			//MurmurHash3_x86_128(str, 256, 1384975, murhash);	// Computed in mapping table
+			//hash1 = murhash[0];
+
+			dummy_filter.GenerateIndexTagHash(str, &raw_index, &index, &tag);
+			hash1 = raw_index;
 			if(adaptive){
 				//Check small hash table
 				t_hash1 = hash1 % sht_max_buckets;
@@ -133,7 +157,7 @@ int main(int argc, char** argv) {
 				}else{
 					//Check cuckoo filter
 					hash1 = hash1 % max_blocks;
-					if (filter[hash1] && filter[hash1]->Contain(str) == cuckoofilter::Ok) {
+					if (filter[hash1] && filter[hash1]->Contain(str, index, tag) == cuckoofilter::Ok) {
 					    false_queries++;
 					    //cout << record << endl;
 					    sht[t_hash1] = record;
@@ -144,7 +168,7 @@ int main(int argc, char** argv) {
 			}else{
 				//Check cuckoo filter
 				hash1 = hash1 % max_blocks;
-				if (filter[hash1] && filter[hash1]->Contain(str) == cuckoofilter::Ok) {
+				if (filter[hash1] && filter[hash1]->Contain(str, index, tag) == cuckoofilter::Ok) {
 				    false_queries++;
 				    //cout << record << endl;
 				}else{

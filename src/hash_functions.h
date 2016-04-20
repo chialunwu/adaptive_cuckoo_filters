@@ -7,10 +7,9 @@ CSS 2.0
 #define _HASH_FUNCTIONS_H_
 
 #include "fnv.h"
+#include "MurmurHash3.h"
 
 
 Fnv32_t fnv_32a_str(char *str, Fnv32_t hval, int object_key_len);
-
-void MurmurHash3_x86_32 ( const void * key, int len, uint32_t seed, void * out );
 
 #endif

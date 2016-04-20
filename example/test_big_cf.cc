@@ -35,8 +35,8 @@ vector<string> split(const string &s, char delim) {
 }
 
 int main(int argc, char** argv) {
-    size_t total_items  = 200000;
-    size_t sht_max_buckets = 1000;
+    size_t total_items  = 2000000;
+    size_t sht_max_buckets = 0;
 
     // Create a cuckoo filter where each item is of type size_t and
     // use 12 bits for each item:
@@ -88,11 +88,15 @@ int main(int argc, char** argv) {
 		
 		strcpy(str, record.c_str());
 		if(mapping_table.find(record) == mapping_table.end()){
+			size_t index, raw_index;
+			uint32_t tag;
 
 			mapping_table[record] = 1;
 			//cout << type << ' ' << record << endl;
 			gettimeofday(&start,NULL);
-			if (filter.Add(str) != cuckoofilter::Ok) {
+
+			filter.GenerateIndexTagHash(str, &raw_index, &index, &tag);
+			if (filter.Add(str, index, tag) != cuckoofilter::Ok) {
 			     cout << "Fail" << endl;
 			     break;
 			}
@@ -113,19 +117,20 @@ int main(int argc, char** argv) {
 		    strcpy(str, record.c_str());
 
 		    if(mapping_table.find(record) == mapping_table.end()){
+			size_t index, raw_index;
+			uint32_t tag;
+
 			gettimeofday(&start,NULL);
 
-			if(sht_max_buckets > 0) {
- 			    MurmurHash3_x86_32(str, 256, 1384975, &hash1);
-			    hash1 = hash1 % sht_max_buckets;
-			}
-
+			filter.GenerateIndexTagHash(str, &raw_index, &index, &tag);
+			if(sht_max_buckets > 0)
+				hash1 = raw_index % sht_max_buckets;
 			//Check small hash table
 			if(sht_max_buckets > 0 && sht[hash1].compare(record) == 0){
 				// True negative
 				true_negative++;
 			}else{
-				if (filter.Contain(str) == cuckoofilter::Ok) {
+				if (filter.Contain(str, index, tag) == cuckoofilter::Ok) {
 				    false_queries++;
 				    if(sht_max_buckets > 0)
 				    	sht[hash1] = record;

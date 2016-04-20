@@ -11,6 +11,7 @@ LDFLAGS+= -Wall -lpthread -lssl -lcrypto
 LIBOBJECTS = \
 	./src/hashutil.o \
 	./src/hash_functions.o\
+	./src/MurmurHash3.o\
 
 HEADERS = $(wildcard src/*.h)
 

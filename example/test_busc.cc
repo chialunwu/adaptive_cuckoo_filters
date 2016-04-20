@@ -79,6 +79,8 @@ int main(int argc, char** argv) {
     ifstream infile(argv[1]);
     string line;
 
+
+    uint32_t murhash[4];
     uint32_t hash1=0;
     uint32_t hash2=0;
 
@@ -115,8 +117,10 @@ int main(int argc, char** argv) {
 			mapping_table[record] = 1;
 
 			gettimeofday(&start,NULL);
-			MurmurHash3_x86_32(str, 256, 1384975, &hash1);   // Computed in mapping table
-		 	hash2 = fnv_32a_str(str, FNV1_32A_INIT, 256);
+			MurmurHash3_x64_128(str, 256, 1384975, murhash);   // Computed in mapping table
+			hash1 = murhash[0];
+		 	//hash2 = fnv_32a_str(str, FNV1_32A_INIT, 256);
+		 	hash2 = murhash[1];
 
 			hash1 = hash1 % max_buckets;
 			//cout << type << ' ' << record << endl;
@@ -169,8 +173,10 @@ int main(int argc, char** argv) {
 		    strcpy(str, record.c_str());
 		    if(mapping_table.find(record) == mapping_table.end()){
 			gettimeofday(&start,NULL);
-			MurmurHash3_x86_32(str, 256, 1384975, &hash1);	// Computed in mapping table
-			hash2 = fnv_32a_str(str, FNV1_32A_INIT, 256);
+			MurmurHash3_x64_128(str, 256, 1384975, murhash);	// Computed in mapping table
+			hash1 = murhash[0];
+			//hash2 = fnv_32a_str(str, FNV1_32A_INIT, 256);
+			hash2 = murhash[1];
 			//Check cuckoo filter
 			hash1 = hash1 % max_buckets;
 			

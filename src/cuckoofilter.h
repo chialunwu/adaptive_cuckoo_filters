@@ -8,6 +8,8 @@
 #include "printutil.h"
 #include "singletable.h"
 
+#include "hash_functions.h"
+
 #include <cassert>
 
 namespace cuckoofilter {
@@ -69,6 +71,28 @@ public:
 
             *index = IndexHash((uint32_t) (hv >> 32));
             *tag   = TagHash((uint32_t) (hv & 0xFFFFFFFF));
+        }
+
+
+        inline void GenerateIndexTagHash(const ItemType &item,
+					 size_t* raw_index,
+                                         size_t* index,
+                                         uint32_t* tag) const {
+/*
+            std::string hashed_key = HashUtil::SHA1Hash((const char*) &item,
+                                                   sizeof(item));
+            uint64_t hv = *((uint64_t*) hashed_key.c_str());
+
+	    *raw_index = (uint32_t) (hv & 0xFFFFFFFF) ;
+            *index = IndexHash((uint32_t) (hv >> 32));
+            *tag   = TagHash((uint32_t) (hv & 0xFFFFFFFF));
+*/
+	    uint32_t murhash[4];
+            MurmurHash3_x64_128(&item, sizeof(item), 1384975, murhash);
+
+	    *raw_index = (size_t)murhash[0];
+	    *index = IndexHash(murhash[1]);
+	    *tag = TagHash(murhash[2]);
         }
 
         inline size_t AltIndex(const size_t index, const uint32_t tag) const {
