@@ -19,6 +19,7 @@ namespace cuckoofilter {
         NotFound = 1,
         NotEnoughSpace = 2,
         NotSupported = 3,
+	NotSure = 4	// Not sure if the positive is true/false positive -> Need to check the stash
     };
 
     // maximum number of cuckoo kicks before claiming failure
@@ -133,15 +134,18 @@ public:
 
         // Add an item to the filter.
         Status Add(const ItemType& item);
-        Status Add(const ItemType& item, size_t i, uint32_t tag);
+        Status Add(const ItemType& item, const size_t i, const uint32_t tag);
 
 
         // Report if the item is inserted, with false positive rate.
         Status Contain(const ItemType& item) const;
-        Status Contain(const ItemType& item, size_t i, uint32_t tag) const;
+        Status Contain(const ItemType& item, const size_t i, const uint32_t tag, size_t* index) const;
 
         // Delete an key from the filter
         Status Delete(const ItemType& item);
+
+	// Adapt to False Positive
+	void AdaptFalsePositive(const size_t i);
 
         /* methods for providing stats  */
         // summary infomation
@@ -176,7 +180,7 @@ public:
               template<size_t> class TableType>
     Status
     CuckooFilter<ItemType, bits_per_item, TableType>::Add(
-            const ItemType& item, size_t i, uint32_t tag) {
+            const ItemType& item, const size_t i, const uint32_t tag) {
         if (victim_.used) {
             return NotEnoughSpace;
         }
@@ -244,9 +248,10 @@ public:
               template<size_t> class TableType>
     Status
     CuckooFilter<ItemType, bits_per_item, TableType>::Contain(
-            const ItemType& key, size_t i, uint32_t tag) const {
+            const ItemType& key, const size_t i, const uint32_t tag, size_t *index) const {
         bool found = false;
         size_t i2;
+	int rv;
 
 	//std::cout << "key:" << key << " i:" << i1 << " tag:" << tag << std::endl;
 
@@ -257,11 +262,20 @@ public:
         found = victim_.used && (tag == victim_.tag) && 
             (i == victim_.index || i2 == victim_.index);
 
-        if (found || table_->FindTagInBuckets(i, i2, tag)) {
+	rv = table_->FindTagInBuckets2(i, i2, tag);
+
+	if(rv / 2 == 0)
+	    *index = i;
+	else
+	    *index = i2;
+
+	if ( rv == -1){ 
+	    return NotFound;
+        } else if (found || (rv % 2 == 1)) {
             return Ok;
         } else {
-            return NotFound;
-        }
+	    return NotSure;
+	}
     }
 
 
@@ -299,6 +313,14 @@ public:
             AddImpl(i, tag);
         }
         return Ok;
+    }
+
+    template <typename ItemType,
+              size_t bits_per_item,
+              template<size_t> class TableType>
+    void
+    CuckooFilter<ItemType, bits_per_item, TableType>::AdaptFalsePositive(const size_t i) {
+	table_->SetBucketFalsePositive(i);	
     }
 
     template <typename ItemType,

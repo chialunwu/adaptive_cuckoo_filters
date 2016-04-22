@@ -16,3 +16,4 @@ test_big_cf
 test_busc
 test_ori
 test_split_cf_adaptive
+test_split_cf_adaptive_int

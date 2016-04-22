@@ -21,6 +21,7 @@ namespace cuckoofilter {
 
         struct Bucket {
             char bits_[bytes_per_bucket];
+	    char false_positive;
         } __attribute__((__packed__));
 
         // using a pointer adds one more indirection
@@ -41,7 +42,7 @@ namespace cuckoofilter {
             delete [] buckets_;
         }
 
-        void CleanupTags() { memset(buckets_, 0, bytes_per_bucket * num_buckets); }
+        void CleanupTags() { memset(buckets_, 0, (bytes_per_bucket + 1) * num_buckets); }
 
         size_t SizeInBytes() const { return bytes_per_bucket * num_buckets; }
 
@@ -128,6 +129,73 @@ namespace cuckoofilter {
 
             return;
         }
+
+	inline int FindTagInBuckets2(const size_t i1,
+				     const size_t i2,
+				     const uint32_t tag) const {
+	    // Return val: 0 true negative, 1 Should be true positive, 2 may be false positive
+	    const char* p1 = buckets_[i1].bits_;
+            const char* p2 = buckets_[i2].bits_;
+
+	    const char f1 = buckets_[i1].false_positive;
+	    const char f2 = buckets_[i2].false_positive;
+
+            uint64_t v1 =  *((uint64_t*) p1);
+            uint64_t v2 =  *((uint64_t*) p2);
+
+	    int i = -1;
+
+            // caution: unaligned access & assuming little endian
+            if (bits_per_tag == 4 && tags_per_bucket == 4) {
+                if (hasvalue4(v1, tag))
+		    i = i1;
+	        else if (hasvalue4(v2, tag))
+		    i = i2;
+            }
+            else if (bits_per_tag == 8 && tags_per_bucket == 4) {
+                if (hasvalue8(v1, tag))
+		    i = i1;
+	        else if (hasvalue8(v2, tag))
+		    i = i2;
+            }
+            else if (bits_per_tag == 12 && tags_per_bucket == 4) {
+                if (hasvalue12(v1, tag))
+		    i = i1;
+	        else if (hasvalue12(v2, tag))
+		    i = i2;
+            }
+            else if (bits_per_tag == 16 && tags_per_bucket == 4) {
+                if (hasvalue16(v1, tag))
+		    i = i1;
+	        else if (hasvalue16(v2, tag))
+		    i = i2;
+            }
+            else {
+                for (size_t j = 0; j < tags_per_bucket; j++ ){
+                    if (ReadTag(i1, j) == tag) {
+			i = i1;
+			break;
+		    }else if (ReadTag(i2,j) == tag){
+                        i = i2;
+			break;
+		    }
+                }
+            }
+
+	    if (i == -1){
+		return -1;
+	    }else if (i == i1){
+		if (f1 > 0)
+		    return 0;
+		else
+		    return 1;
+	    }else if (i == i2){
+		if (f2 > 0)
+		    return 2;
+		else
+		    return 3;
+	    }
+	}
 
         inline bool FindTagInBuckets(const size_t i1,
                                      const size_t i2,
@@ -229,6 +297,10 @@ namespace cuckoofilter {
             }
             return num;
         } // NumTagsInBucket
+
+	inline void SetBucketFalsePositive(const size_t i) {
+	    buckets_[i].false_positive = 1;
+	}
 
     };// SingleTable
 }

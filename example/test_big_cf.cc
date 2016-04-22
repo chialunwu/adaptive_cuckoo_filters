@@ -35,8 +35,8 @@ vector<string> split(const string &s, char delim) {
 }
 
 int main(int argc, char** argv) {
-    size_t total_items  = 2000000;
-    size_t sht_max_buckets = 0;
+    size_t total_items  = 200000;
+    size_t sht_max_buckets = 2;
 
     // Create a cuckoo filter where each item is of type size_t and
     // use 12 bits for each item:
@@ -117,27 +117,38 @@ int main(int argc, char** argv) {
 		    strcpy(str, record.c_str());
 
 		    if(mapping_table.find(record) == mapping_table.end()){
-			size_t index, raw_index;
+			size_t index, raw_index, r_index;
 			uint32_t tag;
+			size_t status;
 
 			gettimeofday(&start,NULL);
 
 			filter.GenerateIndexTagHash(str, &raw_index, &index, &tag);
 			if(sht_max_buckets > 0)
 				hash1 = raw_index % sht_max_buckets;
-			//Check small hash table
-			if(sht_max_buckets > 0 && sht[hash1].compare(record) == 0){
-				// True negative
+
+			status  = filter.Contain(str, index, tag, &r_index);
+			if (status == cuckoofilter::Ok){
+			    false_queries++;
+			    if(sht_max_buckets > 0){
+			        filter.AdaptFalsePositive(r_index);
+			        sht[hash1] = record;
+			    }
+			    //cout << r_index << endl;
+			} else if (status == cuckoofilter::NotSure){
+			    if(sht[hash1].compare(record) == 0){
+			        // True negative
 				true_negative++;
-			}else{
-				if (filter.Contain(str, index, tag) == cuckoofilter::Ok) {
-				    false_queries++;
-				    if(sht_max_buckets > 0)
-				    	sht[hash1] = record;
-				}else{
-				    true_negative++;
-				}
+			    }else{
+				false_queries++;
+				//cout << record << endl;
+				filter.AdaptFalsePositive(r_index);
+				sht[hash1] = record;
+			    }
+			} else {
+			    true_negative++;
 			}
+
 			gettimeofday(&end,NULL);
 			lookup_t += 1000000 * (end.tv_sec-start.tv_sec)+ end.tv_usec-start.tv_usec;
 		    }

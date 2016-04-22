@@ -37,6 +37,9 @@ test_split_cf: example/test_split_cf.o $(LIBOBJECTS)
 test_split_cf_adaptive: example/test_split_cf_adaptive.o $(LIBOBJECTS) 
 	$(CC) example/test_split_cf_adaptive.o $(LIBOBJECTS) $(LDFLAGS) -o $@
 
+test_split_cf_adaptive_int: example/test_split_cf_adaptive_int.o $(LIBOBJECTS) 
+	$(CC) example/test_split_cf_adaptive_int.o $(LIBOBJECTS) $(LDFLAGS) -o $@
+
 %.o: %.cc ${HEADERS} Makefile
 	$(CC) $(CFLAGS) $< -o $@
 

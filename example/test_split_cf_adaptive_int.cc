@@ -36,7 +36,7 @@ vector<string> split(const string &s, char delim) {
 
 int main(int argc, char** argv) {
     size_t max_blocks = 20000;
-    size_t sht_max_buckets = 1000;
+    size_t sht_max_buckets = 10;
     size_t single_cf_size = 100;
 
     bool adaptive = true;
@@ -49,15 +49,15 @@ int main(int argc, char** argv) {
     //   CuckooFilter<size_t, 13, cuckoofilter::PackedTable> filter(total_items);
 
     // This is for cheating
-    map<string, int> mapping_table;
-    map<string, int>::iterator iter;    
+    map<int, int> mapping_table;
+    map<int, int>::iterator iter;    
    
-    CuckooFilter<char[256], 8> **filter = new CuckooFilter<char[256], 8>*[max_blocks];
-    CuckooFilter<char[256], 8> dummy_filter(single_cf_size);
+    CuckooFilter<int, 4> **filter = new CuckooFilter<int, 4>*[max_blocks];
+    CuckooFilter<int, 4> dummy_filter(single_cf_size);
 
 
     // Small hash table storing true negative caused by false positive
-    string *sht = new string[sht_max_buckets];
+    int sht[sht_max_buckets];
 
     ifstream infile(argv[1]);
     string line;
@@ -87,15 +87,11 @@ int main(int argc, char** argv) {
 	vector <string> t2 = split(t1[1], ':');
 //	cout << record << '\n';
 
-	char str[256];
-	bzero(str, 256);
-
 	if(type == "BoscI:"){
 	   if(t2.size() >= 3){
 		//cout << line << '\n';
-		string record = t2[0]+t2[2];
+		int record = atoi(t2[0].c_str());
 		
-		strcpy(str, record.c_str());
 		if(mapping_table.find(record) == mapping_table.end()){
 			size_t index, raw_index;
 			uint32_t tag;
@@ -110,15 +106,15 @@ int main(int argc, char** argv) {
 			//MurmurHash3_x86_128(str, 256, 1384975, murhash);   // Computed in mapping table
 			//hash1 = murhash[0] % max_blocks;
 
-			dummy_filter.GenerateIndexTagHash(str, &raw_index, &index, &tag);
+			dummy_filter.GenerateIndexTagHash(record, &raw_index, &index, &tag);
 			hash1 = raw_index % max_blocks;
 			//cout << type << ' ' << record << endl;
 			if(!filter[hash1]){
-			    filter[hash1] = new CuckooFilter<char[256], 8> (single_cf_size);
+			    filter[hash1] = new CuckooFilter<int, 4> (single_cf_size);
 			    filter_size += filter[hash1]->SizeInBytes();
 			    filter_count ++;
 			} 
-			if (filter[hash1]->Add(str, index, tag) != cuckoofilter::Ok) {
+			if (filter[hash1]->Add(record, index, tag) != cuckoofilter::Ok) {
 			     cout << "Fail" << endl;
 			     break;
 			}
@@ -132,9 +128,7 @@ int main(int argc, char** argv) {
 	}else if(type == "BoscS:[An]"){
 	   if(t2.size() >=2 ){
 		//cout << line << '\n';
-		string record = t2[0]+t2[1];
-		if(record.length() < 256){
-		    strcpy(str, record.c_str());
+		int record = atoi(t2[0].c_str());
 		    if(mapping_table.find(record) == mapping_table.end()){
 			size_t index, raw_index, r_index;
 			uint32_t tag;
@@ -147,7 +141,7 @@ int main(int argc, char** argv) {
 			//MurmurHash3_x86_128(str, 256, 1384975, murhash);	// Computed in mapping table
 			//hash1 = murhash[0];
 
-			dummy_filter.GenerateIndexTagHash(str, &raw_index, &index, &tag);
+			dummy_filter.GenerateIndexTagHash(record, &raw_index, &index, &tag);
 			hash1 = raw_index;
 
 			//cout << hash1 % max_blocks << endl;
@@ -158,20 +152,21 @@ int main(int argc, char** argv) {
 				hash1 = hash1 % max_blocks;
 			
 				if (filter[hash1]) {
-				    status  = filter[hash1]->Contain(str, index, tag, &r_index);
+				    status  = filter[hash1]->Contain(record, index, tag, &r_index);
 				    if (status == cuckoofilter::Ok){
 					false_queries++;
 					filter[hash1]->AdaptFalsePositive(r_index);
-					sht[t_hash1] = record;
-					//cout << r_index << endl;
+					//sht[t_hash1] = record;
+					//cout << record << endl;
 				    } else if (status == cuckoofilter::NotSure){
-					    if(sht[t_hash1].compare(record) == 0){
+					    if(sht[t_hash1] == record){
 						// True negative
 						true_negative++;
 					    }else{
 						false_queries++;
 						//cout << record << endl;
-						filter[hash1]->AdaptFalsePositive(r_index);
+						//filter[hash1]->AdaptFalsePositive(r_index);
+						// Insert record to sht when second false positive
 						sht[t_hash1] = record;
 					    }
 				    } else {
@@ -184,7 +179,7 @@ int main(int argc, char** argv) {
 			}else{
 				//Check cuckoo filter
 				hash1 = hash1 % max_blocks;
-				if (filter[hash1] && filter[hash1]->Contain(str, index, tag, &r_index) == cuckoofilter::Ok) {
+				if (filter[hash1] && filter[hash1]->Contain(record, index, tag, &r_index) == cuckoofilter::Ok) {
 				    false_queries++;
 				    //cout << record << endl;
 				}else{
@@ -196,7 +191,6 @@ int main(int argc, char** argv) {
 			lookup_t += 1000000 * (end.tv_sec-start.tv_sec)+ end.tv_usec-start.tv_usec;
 		    }
 		    total_queries++;
-		}
 	   }
 	}
     }    
