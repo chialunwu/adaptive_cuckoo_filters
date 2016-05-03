@@ -184,17 +184,18 @@ namespace cuckoofilter {
 
 	    if (i == -1){
 		return -1;
-	    }else if (i == i1){
+	    }else if (i == (int)i1){
 		if (f1 > 0)
 		    return 0;
 		else
 		    return 1;
-	    }else if (i == i2){
+	    }else if (i == (int)i2){
 		if (f2 > 0)
 		    return 2;
 		else
 		    return 3;
 	    }
+	    return -1;
 	}
 
         inline bool FindTagInBuckets(const size_t i1,

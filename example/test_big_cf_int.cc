@@ -35,8 +35,8 @@ vector<string> split(const string &s, char delim) {
 }
 
 int main(int argc, char** argv) {
-    size_t total_items  = 100000;
-    size_t sht_max_buckets = 0;
+    size_t total_items  = 1000000;
+    size_t sht_max_buckets = 10;
 
     // Create a cuckoo filter where each item is of type size_t and
     // use 12 bits for each item:
@@ -47,14 +47,12 @@ int main(int argc, char** argv) {
     //   CuckooFilter<size_t, 13, cuckoofilter::PackedTable> filter(total_items);
 
     // This is for cheating
-    map<string, int> mapping_table;
-    map<string, int>::iterator iter;    
+    map<size_t, int> mapping_table;
+    map<size_t, int>::iterator iter;    
 
-    CuckooFilter<char[256], 4> filter(total_items);
+    CuckooFilter<size_t, 4> filter(total_items);
     // Small hash table storing true negative caused by false positive
-    string *sht;
-    if(sht_max_buckets > 0)
-    	sht = new string[sht_max_buckets];
+    size_t sht[sht_max_buckets];
 
     ifstream infile(argv[1]);
     string line;
@@ -84,9 +82,8 @@ int main(int argc, char** argv) {
 	if(type == "BoscI:"){
 	   if(t2.size() >= 3){
 		//cout << line << '\n';
-		string record = t2[0]+t2[2];
+		size_t record = atoi(t2[0].c_str());
 		
-		strcpy(str, record.c_str());
 		if(mapping_table.find(record) == mapping_table.end()){
 			size_t index, raw_index;
 			uint32_t tag;
@@ -95,9 +92,9 @@ int main(int argc, char** argv) {
 			//cout << type << ' ' << record << endl;
 			gettimeofday(&start,NULL);
 
-			filter.GenerateIndexTagHash(str, &raw_index, &index, &tag);
+			filter.GenerateIndexTagHash(record, &raw_index, &index, &tag);
 			//cout << index << '/' << tag << endl;
-			if (filter.Add(str, index, tag) != cuckoofilter::Ok) {
+			if (filter.Add(record, index, tag) != cuckoofilter::Ok) {
 			     cout << "Fail" << endl;
 			     break;
 			}
@@ -113,9 +110,7 @@ int main(int argc, char** argv) {
 	}else if(type == "BoscS:[An]"){
 	   if(t2.size() >=2 ){
 		//cout << line << '\n';
-		string record = t2[0]+t2[1];
-		if(record.length() < 256){
-		    strcpy(str, record.c_str());
+		size_t record = atoi(t2[0].c_str());
 
 		    if(mapping_table.find(record) == mapping_table.end()){
 			size_t index, raw_index, r_index;
@@ -124,11 +119,11 @@ int main(int argc, char** argv) {
 
 			gettimeofday(&start,NULL);
 
-			filter.GenerateIndexTagHash(str, &raw_index, &index, &tag);
+			filter.GenerateIndexTagHash(record, &raw_index, &index, &tag);
 			if(sht_max_buckets > 0)
 				hash1 = raw_index % sht_max_buckets;
 
-			status  = filter.Contain(str, index, tag, &r_index);
+			status  = filter.Contain(record, index, tag, &r_index);
 			if (status == cuckoofilter::Ok){
 			    false_queries++;
 			    if(sht_max_buckets > 0){
@@ -137,7 +132,7 @@ int main(int argc, char** argv) {
 			    }
 			    //cout << r_index << endl;
 			} else if (status == cuckoofilter::NotSure){
-			    if(sht[hash1].compare(record) == 0){
+			    if(sht[hash1] == record){
 			        // True negative
 				true_negative++;
 			    }else{
@@ -154,7 +149,6 @@ int main(int argc, char** argv) {
 			lookup_t += 1000000 * (end.tv_sec-start.tv_sec)+ end.tv_usec-start.tv_usec;
 		    }
 		    total_queries++;
-		}
 	   }
 	}
     }    

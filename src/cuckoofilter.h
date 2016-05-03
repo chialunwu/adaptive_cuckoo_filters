@@ -76,6 +76,8 @@ public:
 
 
         inline void GenerateIndexTagHash(const ItemType &item,
+					 const size_t item_bytes,
+					 bool item_is_pointer,
 					 size_t* raw_index,
                                          size_t* index,
                                          uint32_t* tag) const {
@@ -89,7 +91,12 @@ public:
             *tag   = TagHash((uint32_t) (hv & 0xFFFFFFFF));
 */
 	    uint32_t murhash[4];
-            MurmurHash3_x64_128(&item, sizeof(item), 1384975, murhash);
+		if(item_is_pointer) {
+    	    MurmurHash3_x64_128(item, item_bytes, 1384975, murhash);
+		}else{
+		    std::cout << "generate: " << item << std::endl;
+    	    MurmurHash3_x64_128(&item, item_bytes, 1384975, murhash);
+		}
 
 	    *raw_index = (size_t)murhash[0];
 	    *index = IndexHash(murhash[1]);
@@ -134,12 +141,12 @@ public:
 
         // Add an item to the filter.
         Status Add(const ItemType& item);
-        Status Add(const ItemType& item, const size_t i, const uint32_t tag);
+        Status Add(const size_t i, const uint32_t tag);
 
 
         // Report if the item is inserted, with false positive rate.
         Status Contain(const ItemType& item) const;
-        Status Contain(const ItemType& item, const size_t i, const uint32_t tag, size_t* index) const;
+        Status Contain(const size_t i, const uint32_t tag, size_t* index) const;
 
         // Delete an key from the filter
         Status Delete(const ItemType& item);
@@ -179,8 +186,7 @@ public:
     template <typename ItemType, size_t bits_per_item,
               template<size_t> class TableType>
     Status
-    CuckooFilter<ItemType, bits_per_item, TableType>::Add(
-            const ItemType& item, const size_t i, const uint32_t tag) {
+    CuckooFilter<ItemType, bits_per_item, TableType>::Add(const size_t i, const uint32_t tag) {
         if (victim_.used) {
             return NotEnoughSpace;
         }
@@ -248,12 +254,11 @@ public:
               template<size_t> class TableType>
     Status
     CuckooFilter<ItemType, bits_per_item, TableType>::Contain(
-            const ItemType& key, const size_t i, const uint32_t tag, size_t *index) const {
+            const size_t i, const uint32_t tag, size_t *index) const {
         bool found = false;
         size_t i2;
 	int rv;
 
-	//std::cout << "key:" << key << " i:" << i1 << " tag:" << tag << std::endl;
 
         i2 = AltIndex(i, tag);
 

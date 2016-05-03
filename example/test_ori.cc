@@ -13,7 +13,7 @@
 using cuckoofilter::CuckooFilter;
 
 int main(int argc, char** argv) {
-    size_t total_items  = 1000000;
+    size_t total_items  = 12345678;
     size_t sht_max_buckets = 0;
 
     // Timing
@@ -46,6 +46,7 @@ int main(int argc, char** argv) {
 
 	filter.GenerateIndexTagHash(i, &raw_index, &index, &tag);
         if (filter.Add(i, index, tag) != cuckoofilter::Ok) {
+	    std::cout << "Fail" << std::endl;	    
             break;
         }
     }
@@ -55,11 +56,11 @@ int main(int argc, char** argv) {
     // Check if previously inserted items are in the filter, expected
     // true for all items
     for (size_t i = 0; i < num_inserted; i++) {
-	size_t index, raw_index;
+	size_t index, raw_index, r_index;
 	uint32_t tag;
 
         filter.GenerateIndexTagHash(i, &raw_index, &index, &tag);
-        assert(filter.Contain(i, index, tag) == cuckoofilter::Ok);
+        assert(filter.Contain(i, index, tag, &r_index) == cuckoofilter::Ok);
     }
 
     // Check non-existing items, a few false positives expected
@@ -69,7 +70,7 @@ int main(int argc, char** argv) {
 
     gettimeofday(&start,NULL);
     for (size_t i = total_items; i < 2 * total_items; i++) {
-	size_t index, raw_index;
+	size_t index, raw_index, r_index;
 	uint32_t tag;
 
 	/*if(sht_max_buckets > 0) {
@@ -84,7 +85,7 @@ int main(int argc, char** argv) {
 	    hash1 = raw_index % sht_max_buckets;
 
 	    if(sht[hash1] != target){
-		if (filter.Contain(target, index, tag) == cuckoofilter::Ok) {
+		if (filter.Contain(target, index, tag, &r_index) == cuckoofilter::Ok) {
 		    false_queries++;
 		    if(sht_max_buckets > 0)
 			sht[hash1] = target;
@@ -92,7 +93,7 @@ int main(int argc, char** argv) {
 	    }
 	}else{
 		// fp: 1999461
-                if (filter.Contain(target, index, tag) == cuckoofilter::Ok) {
+                if (filter.Contain(target, index, tag, &r_index) == cuckoofilter::Ok) {
 		    //std::cout << i << std::endl;
                     false_queries++;
                 }
