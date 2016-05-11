@@ -35,8 +35,8 @@ vector<string> split(const string &s, char delim) {
 }
 
 int main(int argc, char** argv) {
-    size_t total_items  = 100000;
-    size_t sht_max_buckets = 0;
+    size_t total_items  = 200000;
+    size_t sht_max_buckets = 10;
 
     // Create a cuckoo filter where each item is of type size_t and
     // use 12 bits for each item:
@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
     map<string, int> mapping_table;
     map<string, int>::iterator iter;    
 
-    CuckooFilter<char[256], 4> filter(total_items);
+    CuckooFilter<char[256], 8> filter(total_items);
     // Small hash table storing true negative caused by false positive
     string *sht;
     if(sht_max_buckets > 0)
@@ -88,16 +88,16 @@ int main(int argc, char** argv) {
 		
 		strcpy(str, record.c_str());
 		if(mapping_table.find(record) == mapping_table.end()){
-			size_t index, raw_index;
-			uint32_t tag;
+			size_t raw_index;
+			uint32_t index, tag;
 
 			mapping_table[record] = 1;
 			//cout << type << ' ' << record << endl;
 			gettimeofday(&start,NULL);
 
-			filter.GenerateIndexTagHash(str, &raw_index, &index, &tag);
+			filter.GenerateIndexTagHash(str, 256, true, &raw_index, &index, &tag);
 			//cout << index << '/' << tag << endl;
-			if (filter.Add(str, index, tag) != cuckoofilter::Ok) {
+			if (filter.Add(index, tag) == cuckoofilter::NotEnoughSpace) {
 			     cout << "Fail" << endl;
 			     break;
 			}
@@ -118,17 +118,17 @@ int main(int argc, char** argv) {
 		    strcpy(str, record.c_str());
 
 		    if(mapping_table.find(record) == mapping_table.end()){
-			size_t index, raw_index, r_index;
-			uint32_t tag;
+			size_t raw_index, r_index;
+			uint32_t index, tag;
 			size_t status;
 
 			gettimeofday(&start,NULL);
 
-			filter.GenerateIndexTagHash(str, &raw_index, &index, &tag);
+			filter.GenerateIndexTagHash(str, 256, true, &raw_index, &index, &tag);
 			if(sht_max_buckets > 0)
 				hash1 = raw_index % sht_max_buckets;
 
-			status  = filter.Contain(str, index, tag, &r_index);
+			status  = filter.Contain(index, tag, &r_index);
 			if (status == cuckoofilter::Ok){
 			    false_queries++;
 			    if(sht_max_buckets > 0){
@@ -165,7 +165,7 @@ int main(int argc, char** argv) {
     cout << "Lookup MOPS : " << (float)total_queries/lookup_t << "\n";
     cout << "Filter size(Bytes) : " << filter.SizeInBytes() << " bytes\n";
     cout << "false positive rate : "
-              << 100.0 * false_queries / total_queries
+              << 100.0 * false_queries / true_negative
               << "%\n\n";
 
     cout << "Inserted items : " << num_inserted << '\n';

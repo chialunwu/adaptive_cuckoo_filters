@@ -164,13 +164,13 @@ int main(int argc, char** argv) {
 			
 				if (filter[hash1]) {
 				    status  = filter[hash1]->Contain(index, tag, &r_index);
-				    if (status == cuckoofilter::Ok && true_negative_flag){
+				    if (status == cuckoofilter::Ok && true_negative_flag) {
 					false_queries++;
 					filter[hash1]->AdaptFalsePositive(r_index);
 					sht[t_hash1] = record;
 					//cout << r_index << endl;
 					fpp_filters[hash1]++;
-				    } else if (status == cuckoofilter::NotSure){
+				    } else if (status == cuckoofilter::NotSure) {
 					    if(sht[t_hash1].compare(record) == 0){
 						// True negative
 						true_negative++;

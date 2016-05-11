@@ -35,8 +35,8 @@ vector<string> split(const string &s, char delim) {
 }
 
 int main(int argc, char** argv) {
-    size_t total_items  = 1000000;
-    size_t sht_max_buckets = 10;
+    size_t total_items  = 1500000;
+    size_t sht_max_buckets = 0;
 
     // Create a cuckoo filter where each item is of type size_t and
     // use 12 bits for each item:
@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
     map<size_t, int> mapping_table;
     map<size_t, int>::iterator iter;    
 
-    CuckooFilter<size_t, 4> filter(total_items);
+    CuckooFilter<size_t, 8> filter(total_items);
     // Small hash table storing true negative caused by false positive
     size_t sht[sht_max_buckets];
 
@@ -85,16 +85,16 @@ int main(int argc, char** argv) {
 		size_t record = atoi(t2[0].c_str());
 		
 		if(mapping_table.find(record) == mapping_table.end()){
-			size_t index, raw_index;
-			uint32_t tag;
+			size_t raw_index;
+			uint32_t index, tag;
 
 			mapping_table[record] = 1;
 			//cout << type << ' ' << record << endl;
 			gettimeofday(&start,NULL);
 
-			filter.GenerateIndexTagHash(record, &raw_index, &index, &tag);
+			filter.GenerateIndexTagHash(record, 8, false, &raw_index, &index, &tag);
 			//cout << index << '/' << tag << endl;
-			if (filter.Add(record, index, tag) != cuckoofilter::Ok) {
+			if (filter.Add(index, tag) == cuckoofilter::NotEnoughSpace) {
 			     cout << "Fail" << endl;
 			     break;
 			}
@@ -113,17 +113,17 @@ int main(int argc, char** argv) {
 		size_t record = atoi(t2[0].c_str());
 
 		    if(mapping_table.find(record) == mapping_table.end()){
-			size_t index, raw_index, r_index;
-			uint32_t tag;
+			size_t raw_index, r_index;
+			uint32_t index, tag;
 			size_t status;
 
 			gettimeofday(&start,NULL);
 
-			filter.GenerateIndexTagHash(record, &raw_index, &index, &tag);
+			filter.GenerateIndexTagHash(record, 8, false, &raw_index, &index, &tag);
 			if(sht_max_buckets > 0)
 				hash1 = raw_index % sht_max_buckets;
 
-			status  = filter.Contain(record, index, tag, &r_index);
+			status  = filter.Contain(index, tag, &r_index);
 			if (status == cuckoofilter::Ok){
 			    false_queries++;
 			    if(sht_max_buckets > 0){

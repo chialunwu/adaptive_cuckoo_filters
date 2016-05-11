@@ -27,9 +27,9 @@ const size_t sht_max_buckets = 10;
 const size_t single_cf_size = 100;
 const size_t bits_per_tag = 8;
 
-bool adaptive = true;
-bool rebuild = true;
-bool shrink = true;
+bool adaptive = false;
+bool rebuild = false;
+bool shrink = false;
 
 vector<vector<int> > busc_table(max_filters);
 
@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
     map<int, int>::iterator iter;  
 
 	// The filter !!!
-    AdaptiveCuckooFilters<int, int, sht_max_buckets, max_filters, single_cf_size, bits_per_tag> acf;
+    AdaptiveCuckooFilters<int, int, sht_max_buckets, max_filters, single_cf_size, bits_per_tag> acf(8, 10000000000);
     // For simulation, we have to get the hash to store the original keys
     CuckooFilter<int, bits_per_tag> *dummy_filter = new CuckooFilter<int, bits_per_tag>(single_cf_size);;
 
@@ -63,8 +63,8 @@ int main(int argc, char** argv) {
     string line;
 
 	// Temp variables
-	size_t index, raw_index;
-	uint32_t tag, hash1;
+	size_t raw_index;
+	uint32_t index, tag, hash1;
 	size_t r_index, sht_hash;
 	size_t status;
 	uint32_t vic_hash;
@@ -98,14 +98,14 @@ int main(int argc, char** argv) {
 					mapping_table[record] = 1;
 
 					gettimeofday(&start,NULL);	
-					assert(acf.Add(record) == true);
+					assert(acf.Add(record, &hash1) == true);
 					num_inserted++;
 					gettimeofday(&end,NULL);
 
 					insert_t += 1000000 * (end.tv_sec-start.tv_sec)+ end.tv_usec-start.tv_usec;
 
 					// Insert info busc table
-					dummy_filter->GenerateIndexTagHash(record, &raw_index, &index, &tag);
+					dummy_filter->GenerateIndexTagHash(record, 8, false, &raw_index, &index, &tag);
 					hash1 = raw_index % max_filters;
 					busc_table[hash1].push_back(record);
 				}
@@ -133,7 +133,7 @@ int main(int argc, char** argv) {
 			   }
 			}
     }    
-
+/*
 	// Check true positive correctness
 	for(size_t i=0;i<max_filters;i++){
 		for(size_t j=0; j< busc_table[i].size(); j++){
@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
 			assert(s == adaptive_cuckoofilters::Found || s == adaptive_cuckoofilters::NoFilter);
 		}
 	}  
- 
+ */
     // Output the size of the filter in bytes
     cout << "Insert MOPS : " << (float)num_inserted/insert_t << "\n";
     cout << "Lookup MOPS : " << (float)total_queries/lookup_t << "\n";

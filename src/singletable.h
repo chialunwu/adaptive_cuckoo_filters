@@ -10,6 +10,7 @@
 #include "bitsutil.h"
 #include "debug.h"
 
+using namespace std;
 
 namespace cuckoofilter {
 
@@ -130,6 +131,10 @@ namespace cuckoofilter {
             return;
         }
 
+	inline bool IsBucketFalsePositive(const size_t i) const {
+		return buckets_[i].false_positive == 1;
+	}
+
 	inline int FindTagInBuckets2(const size_t i1,
 				     const size_t i2,
 				     const uint32_t tag) const {
@@ -144,7 +149,6 @@ namespace cuckoofilter {
             uint64_t v2 =  *((uint64_t*) p2);
 
 	    int i = -1;
-
             // caution: unaligned access & assuming little endian
             if (bits_per_tag == 4 && tags_per_bucket == 4) {
                 if (hasvalue4(v1, tag))

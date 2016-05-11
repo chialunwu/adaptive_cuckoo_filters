@@ -13,7 +13,7 @@
 using cuckoofilter::CuckooFilter;
 
 int main(int argc, char** argv) {
-    size_t total_items  = 12345678;
+    size_t total_items  = 100;
     size_t sht_max_buckets = 0;
 
     // Timing
@@ -41,11 +41,11 @@ int main(int argc, char** argv) {
     size_t num_inserted = 0;
     gettimeofday(&start,NULL);
     for (size_t i = 0; i < total_items; i++, num_inserted++) {
-	size_t index, raw_index;
-	uint32_t tag;
+	size_t raw_index;
+	uint32_t index, tag;
 
-	filter.GenerateIndexTagHash(i, &raw_index, &index, &tag);
-        if (filter.Add(i, index, tag) != cuckoofilter::Ok) {
+	filter.GenerateIndexTagHash(i, 4, false, &raw_index, &index, &tag);
+        if (filter.Add(index, tag) != cuckoofilter::Ok) {
 	    std::cout << "Fail" << std::endl;	    
             break;
         }
@@ -56,11 +56,11 @@ int main(int argc, char** argv) {
     // Check if previously inserted items are in the filter, expected
     // true for all items
     for (size_t i = 0; i < num_inserted; i++) {
-	size_t index, raw_index, r_index;
-	uint32_t tag;
+	size_t raw_index, r_index;
+	uint32_t index, tag;
 
-        filter.GenerateIndexTagHash(i, &raw_index, &index, &tag);
-        assert(filter.Contain(i, index, tag, &r_index) == cuckoofilter::Ok);
+        filter.GenerateIndexTagHash(i, 4, false, &raw_index, &index, &tag);
+        assert(filter.Contain(index, tag, &r_index) == cuckoofilter::Ok);
     }
 
     // Check non-existing items, a few false positives expected
@@ -70,8 +70,8 @@ int main(int argc, char** argv) {
 
     gettimeofday(&start,NULL);
     for (size_t i = total_items; i < 2 * total_items; i++) {
-	size_t index, raw_index, r_index;
-	uint32_t tag;
+	size_t raw_index, r_index;
+	uint32_t index, tag;
 
 	/*if(sht_max_buckets > 0) {
 	    MurmurHash3_x86_32(&i, 256, 1384975, &hash1);
@@ -79,13 +79,13 @@ int main(int argc, char** argv) {
 	}*/
 
 	target = i;//1999461;
-        filter.GenerateIndexTagHash(target, &raw_index, &index, &tag);
+        filter.GenerateIndexTagHash(target, 4, false, &raw_index, &index, &tag);
 
 	if(sht_max_buckets > 0){
 	    hash1 = raw_index % sht_max_buckets;
 
 	    if(sht[hash1] != target){
-		if (filter.Contain(target, index, tag, &r_index) == cuckoofilter::Ok) {
+		if (filter.Contain(index, tag, &r_index) == cuckoofilter::Ok) {
 		    false_queries++;
 		    if(sht_max_buckets > 0)
 			sht[hash1] = target;
@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
 	    }
 	}else{
 		// fp: 1999461
-                if (filter.Contain(target, index, tag, &r_index) == cuckoofilter::Ok) {
+                if (filter.Contain(index, tag, &r_index) == cuckoofilter::Ok) {
 		    //std::cout << i << std::endl;
                     false_queries++;
                 }
