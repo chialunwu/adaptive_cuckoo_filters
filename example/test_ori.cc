@@ -13,7 +13,7 @@
 using cuckoofilter::CuckooFilter;
 
 int main(int argc, char** argv) {
-    size_t total_items  = 100;
+    size_t total_items  = 10000;
     size_t sht_max_buckets = 0;
 
     // Timing
@@ -31,7 +31,7 @@ int main(int argc, char** argv) {
     // for each key:
     //   CuckooFilter<size_t, 13, cuckoofilter::PackedTable> filter(total_items);
 
-    CuckooFilter<size_t, 12> filter(total_items);
+    CuckooFilter<size_t, 8> filter(total_items);
     // Small hash table storing true negative caused by false positive
     int *sht;
     if(sht_max_buckets > 0)

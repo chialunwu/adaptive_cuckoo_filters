@@ -27,9 +27,9 @@ using namespace std;
 //#define STRING
 
 // Global variables
-const size_t max_filters = 15450;//1700;
+const size_t max_filters = 2000;//1700;
 const size_t sht_max_buckets = 10;
-const size_t single_cf_size = 100;
+const size_t single_cf_size = 800;
 const size_t bits_per_tag = 8;
 const size_t mem_budget = 2097000;//276000;
 
@@ -156,6 +156,8 @@ int main(int argc, char** argv) {
     struct  timeval end;   
     unsigned  long insert_t=0, lookup_t=0;
 
+
+
 /*******************************************************************************/
 //	acf.LoadStatsToOptimize();
 //	acf.LoadFilter();
@@ -270,7 +272,7 @@ int main(int argc, char** argv) {
 		}
 	}
 
-//	acf.DumpStats();
+	acf.DumpStats();
 	acf.DumpFilter();
  
     // Output the size of the filter in bytes

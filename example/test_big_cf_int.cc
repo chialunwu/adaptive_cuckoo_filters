@@ -35,8 +35,8 @@ vector<string> split(const string &s, char delim) {
 }
 
 int main(int argc, char** argv) {
-    size_t total_items  = 1500000;
-    size_t sht_max_buckets = 0;
+    size_t total_items  = 2000000;
+    size_t sht_max_buckets = 5000;
 
     // Create a cuckoo filter where each item is of type size_t and
     // use 12 bits for each item:
@@ -159,7 +159,7 @@ int main(int argc, char** argv) {
     cout << "Lookup MOPS : " << (float)total_queries/lookup_t << "\n";
     cout << "Filter size(Bytes) : " << filter.SizeInBytes() << " bytes\n";
     cout << "false positive rate : "
-              << 100.0 * false_queries / total_queries
+              << 100.0 * false_queries / (false_queries+true_negative)
               << "%\n\n";
 
     cout << "Inserted items : " << num_inserted << '\n';
