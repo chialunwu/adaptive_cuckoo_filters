@@ -22,7 +22,9 @@ namespace cuckoofilter {
 
         struct Bucket {
             char bits_[bytes_per_bucket];
-	    char false_positive;
+			// Last 1st bit: false positive
+			// Last 2~5 bit: is_alternative_index
+		    char extra;
         } __attribute__((__packed__));
 
         // using a pointer adds one more indirection
@@ -89,7 +91,7 @@ namespace cuckoofilter {
         }
 
         // write tag to pos(i,j)
-        inline void  WriteTag(const size_t i, const size_t j, const uint32_t t) {
+        inline void  WriteTag(const size_t i, const size_t j, const uint32_t t, const bool is_alt) {
             char *p = buckets_[i].bits_;
             uint32_t tag = t & TAGMASK;
             /* following code only works for little-endian */
@@ -128,27 +130,26 @@ namespace cuckoofilter {
                 ((uint32_t*) p)[j] = tag;
             }
 
+			/* TODO: Set the is_alt, now for convenience, save the bit in "extra".
+ 					 Ideally show embed this bit into fingerprint */
+			SetTagIsAlt(i, j, is_alt);
             return;
         }
 
-	inline bool IsBucketFalsePositive(const size_t i) const {
-		return buckets_[i].false_positive == 1;
-	}
-
-	inline int FindTagInBuckets2(const size_t i1,
-				     const size_t i2,
-				     const uint32_t tag) const {
-	    // Return val: 0 true negative, 1 Should be true positive, 2 may be false positive
-	    const char* p1 = buckets_[i1].bits_;
+		inline int FindTagInBuckets2(const size_t i1,
+					     const size_t i2,
+					     const uint32_t tag) const {
+		    // Return val: 0 true negative, 1 Should be true positive, 2 may be false positive
+		    const char* p1 = buckets_[i1].bits_;
             const char* p2 = buckets_[i2].bits_;
 
-	    const char f1 = buckets_[i1].false_positive;
-	    const char f2 = buckets_[i2].false_positive;
+		    const char f1 = buckets_[i1].extra & 0x01;
+		    const char f2 = buckets_[i2].extra & 0x01;
 
             uint64_t v1 =  *((uint64_t*) p1);
             uint64_t v2 =  *((uint64_t*) p2);
 
-	    int i = -1;
+		    int i = -1;
             // caution: unaligned access & assuming little endian
             if (bits_per_tag == 4 && tags_per_bucket == 4) {
                 if (hasvalue4(v1, tag))
@@ -186,21 +187,21 @@ namespace cuckoofilter {
                 }
             }
 
-	    if (i == -1){
-		return -1;
-	    }else if (i == (int)i1){
-		if (f1 > 0)
-		    return 0;
-		else
-		    return 1;
-	    }else if (i == (int)i2){
-		if (f2 > 0)
-		    return 2;
-		else
-		    return 3;
-	    }
-	    return -1;
-	}
+		    if (i == -1){
+				return -1;
+		    }else if (i == (int)i1){
+				if (f1 > 0)
+				    return 0;
+				else
+				    return 1;
+		    }else if (i == (int)i2){
+				if (f2 > 0)
+				    return 2;
+				else
+				    return 3;
+		    }
+		    return -1;
+		}
 
         inline bool FindTagInBuckets(const size_t i1,
                                      const size_t i2,
@@ -277,17 +278,20 @@ namespace cuckoofilter {
         }// DeleteTagFromBucket
 
         inline  bool  InsertTagToBucket(const size_t i,  const uint32_t tag,
-                                         const bool kickout, uint32_t& oldtag) {
-            for (size_t j = 0; j < tags_per_bucket; j++ ){
+                                        const bool kickout, uint32_t& oldtag,
+										bool& is_alt) {
+            for (size_t j = 0; j < tags_per_bucket; j++ ) {
                 if (ReadTag(i, j) == 0) {
-                    WriteTag(i, j, tag);
+                    WriteTag(i, j, tag, is_alt);
                     return true;
                 }
             }
             if (kickout) {
                 size_t r = rand() % tags_per_bucket;
                 oldtag = ReadTag(i, r);
-                WriteTag(i, r, tag);
+				bool tmp_is_alt = IsTagAlt(i, r);
+                WriteTag(i, r, tag, is_alt);
+				is_alt = tmp_is_alt;
             }
             return false;
         }// InsertTagToBucket
@@ -303,10 +307,27 @@ namespace cuckoofilter {
             return num;
         } // NumTagsInBucket
 
-	inline void SetBucketFalsePositive(const size_t i) {
-	    buckets_[i].false_positive = 1;
-	}
+		inline void SetBucketFalsePositive(const size_t i, const bool val) {
+			if (val)
+		    	buckets_[i].extra |= 0x01;
+			else
+				buckets_[i].extra &= ~1;
+		}
 
+		inline void SetTagIsAlt(const size_t i, const size_t j, const bool val) {
+			if (val)
+				buckets_[i].extra |= 1 << (j+1);
+			else
+				buckets_[i].extra &= ~(1 << (j+1)); 
+		}
+
+		inline bool IsBucketFalsePositive(const size_t i) const {
+			return (buckets_[i].extra & 0x01) == 1;
+		}
+
+		inline bool IsTagAlt(const size_t i, const size_t j) {
+			return (buckets_[i].extra & (1 << (j+1))) > 0;
+		}
     };// SingleTable
 }
 

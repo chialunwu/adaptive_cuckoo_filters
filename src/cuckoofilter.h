@@ -34,7 +34,7 @@ public:
 			// Number of items stored
 			size_t  num_items;
 
-		size_t capacity;
+		size_t num_buckets;
 		size_t fingerprint_size;
 		
 		virtual size_t SizeInBytes() const {return 0;}
@@ -118,12 +118,28 @@ public:
 				*tag = murhash[2];
 		}
 
+		// Only support power of 2
 		inline size_t AltIndex(const size_t index, const uint32_t tag) const {
 			// NOTE(binfan): originally we use:
 			// index ^ HashUtil::BobHash((const void*) (&tag), 4)) & table_->INDEXMASK;
 			// now doing a quick-n-dirty way:
 			// 0x5bd1e995 is the hash constant from MurmurHash2
 			return IndexHash((uint32_t) (index ^ (tag * 0x5bd1e995)));
+		}
+
+		// Support any integer
+		inline size_t AltIndex(const size_t index, const uint32_t tag,
+							   const bool is_alt) const {
+			// NOTE(binfan): originally we use:
+			// index ^ HashUtil::BobHash((const void*) (&tag), 4)) & table_->INDEXMASK;
+			// now doing a quick-n-dirty way:
+			// 0x5bd1e995 is the hash constant from MurmurHash2
+			size_t num_buckets = table_->num_buckets;
+			if (!is_alt) {
+				return (uint32_t)((index + (tag * 0x5bd1e995)) % num_buckets);
+			}else{
+				return (uint32_t)((index + num_buckets - ((tag * 0x5bd1e995) % num_buckets)) % num_buckets);
+			}
 		}
 
 		Status AddImpl(const size_t i, const uint32_t tag);
@@ -138,19 +154,29 @@ public:
 		}
 
 //	public:
-		explicit CuckooFilter(const size_t max_num_keys) {
-			size_t assoc = 4;
-			size_t num_buckets = upperpower2(max_num_keys / assoc);
-			double frac = (double) max_num_keys / num_buckets / assoc;
-			if (frac > 0.96) {
-				num_buckets <<= 1;
+		explicit CuckooFilter(const size_t max_num_keys, const bool force) {
+			size_t t_num_buckets;
+			if(!force) {
+/*				size_t assoc = 4;
+				t_num_buckets = upperpower2(max_num_keys / assoc);
+				double frac = (double) max_num_keys / t_num_buckets / assoc;
+				if (frac > 0.96) {
+					t_num_buckets <<= 1;
+				}
+*/
+				// Since the revised Cuckoo Filter can have arbatrary num of buckets
+				t_num_buckets = (size_t)(max_num_keys / 0.95) / 4;
+			} else {
+				// Here, max_num_keys is the bucket size we want to make forcely
+				t_num_buckets = max_num_keys;
 			}
+
 			victim_.used = false;
-			table_  = new TableType<bits_per_item>(num_buckets);
-			//capacity = assoc * num_buckets;
+			table_  = new TableType<bits_per_item>(t_num_buckets);
+			
 			fingerprint_size = bits_per_item;
 			num_items = 0;
-			capacity = max_num_keys;
+			num_buckets = t_num_buckets;
 		}
 
 		~CuckooFilter() {
@@ -220,16 +246,20 @@ public:
 		uint32_t curtag = tag;
 		uint32_t oldtag;
 		bool needClearNC = false;
+		bool is_alt = false;
 
+		// If the bucket has false positive before, should check if the newly inserted item is
+		// in the negative cache, if true should clear that item in the negative cache.
 		if(table_->IsBucketFalsePositive(i) ||
-		   table_->IsBucketFalsePositive(AltIndex(i, tag))) {
+		   table_->IsBucketFalsePositive(AltIndex(i, tag, false))) {
+//		   table_->IsBucketFalsePositive(AltIndex(i, tag))) {
 			needClearNC = true;
 		}
 
 		for (uint32_t count = 0; count < kMaxCuckooCount; count++) {
 			bool kickout = count > 0;
 			oldtag = 0;
-			if (table_->InsertTagToBucket(curindex, curtag, kickout, oldtag)) {
+			if (table_->InsertTagToBucket(curindex, curtag, kickout, oldtag, is_alt)) {
 				num_items++;
 				if (needClearNC) {
 					// Maybe insert the previous false positive item
@@ -238,10 +268,15 @@ public:
 					return Ok;
 				}
 			}
+
 			if (kickout) {
 				curtag = oldtag;
 			}
-			curindex = AltIndex(curindex, curtag);
+
+			curindex = AltIndex(curindex, curtag, is_alt);
+//			curindex = AltIndex(curindex, curtag);
+
+			is_alt = !is_alt;
 		}
 
 		victim_.index = curindex;
@@ -296,8 +331,12 @@ public:
 		t_i = IndexHash(i);
 		t_tag = TagHash(tag);
 
-		i2 = AltIndex(t_i, t_tag);
-		assert(t_i == AltIndex(i2, t_tag));
+		i2 = AltIndex(t_i, t_tag, false);
+		assert(t_i == AltIndex(i2, t_tag, true));
+
+//		i2 = AltIndex(t_i, t_tag);
+//		assert(t_i == AltIndex(i2, t_tag));
+
 		found = victim_.used && (t_tag == victim_.tag) && 
 			(t_i == victim_.index || i2 == victim_.index);
 
@@ -361,7 +400,7 @@ public:
 			  template<size_t> class TableType>
 	void
 	CuckooFilter<ItemType, bits_per_item, TableType>::AdaptFalsePositive(const size_t i) {
-		table_->SetBucketFalsePositive(i);
+		table_->SetBucketFalsePositive(i, true);
 	}
 
 	template <typename ItemType,

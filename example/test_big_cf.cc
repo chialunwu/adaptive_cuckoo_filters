@@ -35,8 +35,11 @@ vector<string> split(const string &s, char delim) {
 }
 
 int main(int argc, char** argv) {
-    size_t total_items  = 200000;
-    size_t sht_max_buckets = 10;
+    size_t sht_max_buckets = 100;
+    size_t mem_budget = 260000;
+	const size_t bits_per_tag = 8;
+	
+	mem_budget -= sht_max_buckets*256;
 
     // Create a cuckoo filter where each item is of type size_t and
     // use 12 bits for each item:
@@ -50,7 +53,7 @@ int main(int argc, char** argv) {
     map<string, int> mapping_table;
     map<string, int>::iterator iter;    
 
-    CuckooFilter<char[256], 8> filter(total_items);
+    CuckooFilter<char[256], bits_per_tag> filter((size_t)(mem_budget/(4*bits_per_tag/8)), true);
     // Small hash table storing true negative caused by false positive
     string *sht;
     if(sht_max_buckets > 0)

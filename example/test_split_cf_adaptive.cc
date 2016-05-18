@@ -24,17 +24,19 @@ using namespace std;
 /* When Change type, change the following
    bytes_per_item, is_pointer, define STRING, STRING2 (in adaptive_cuckoofilters.h)
 */
-//#define STRING
+#define STRING
 
 // Global variables
-const size_t max_filters = 2000;//1700;
-const size_t sht_max_buckets = 10;
-const size_t single_cf_size = 800;
+const size_t max_filters = 200;//1700;
+const size_t single_cf_size = 1000;
 const size_t bits_per_tag = 8;
-const size_t mem_budget = 2097000;//276000;
+
+const size_t sht_max_buckets = 10;
+const size_t mem_budget = 260000;
 
 bool grow = true;
 bool shrink = true;
+
 
 #ifdef STRING
 const size_t bytes_per_item = 256;
@@ -108,6 +110,9 @@ vector<string> split(const string &s, char delim) {
 
 
 int main(int argc, char** argv) {
+// Testing area
+// Test end
+
 #ifdef STRING
     map<string, int> mapping_table;
     map<string, int>::iterator iter;  
@@ -115,7 +120,7 @@ int main(int argc, char** argv) {
 	// The filter !!!
     AdaptiveCuckooFilters<char*, string, sht_max_buckets, max_filters, single_cf_size, bits_per_tag> acf(bytes_per_item, mem_budget);
     // For simulation, we have to get the hash to store the original keys
-    CuckooFilter<char*, bits_per_tag> *dummy_filter = new CuckooFilter<char*, bits_per_tag>(single_cf_size);
+    CuckooFilter<char*, bits_per_tag> *dummy_filter = new CuckooFilter<char*, bits_per_tag>(single_cf_size, false);
 
 	char record[bytes_per_item];	
 	char **ts = new char*[1000000];
@@ -128,7 +133,7 @@ int main(int argc, char** argv) {
 	// The filter !!!
     AdaptiveCuckooFilters<size_t, size_t, sht_max_buckets, max_filters, single_cf_size, bits_per_tag> acf(bytes_per_item, mem_budget);
     // For simulation, we have to get the hash to store the original keys
-    CuckooFilter<size_t, bits_per_tag> *dummy_filter = new CuckooFilter<size_t, bits_per_tag>(single_cf_size);
+    CuckooFilter<size_t, bits_per_tag> *dummy_filter = new CuckooFilter<size_t, bits_per_tag>(single_cf_size, false);
 
 	size_t record;	
 	size_t *ts = new size_t[1000000];
@@ -269,6 +274,7 @@ int main(int argc, char** argv) {
 #endif
 			size_t s = acf.Lookup(record, &status, &hash1, &r_index, &sht_hash);
 			assert(s == adaptive_cuckoofilters::Found);
+//			if (s != adaptive_cuckoofilters::Found) cout << record << endl;
 		}
 	}
 
