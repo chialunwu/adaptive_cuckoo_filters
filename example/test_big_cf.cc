@@ -35,11 +35,15 @@ vector<string> split(const string &s, char delim) {
 }
 
 int main(int argc, char** argv) {
-    size_t sht_max_buckets = 100;
+    size_t sht_max_buckets = 10;
     size_t mem_budget = 260000;
 	const size_t bits_per_tag = 8;
 	
 	mem_budget -= sht_max_buckets*256;
+
+	size_t filter_size = (size_t)(mem_budget/(4*bits_per_tag/8));
+//	size_t filter_size = 170000;
+	bool force = true;
 
     // Create a cuckoo filter where each item is of type size_t and
     // use 12 bits for each item:
@@ -53,7 +57,7 @@ int main(int argc, char** argv) {
     map<string, int> mapping_table;
     map<string, int>::iterator iter;    
 
-    CuckooFilter<char[256], bits_per_tag> filter((size_t)(mem_budget/(4*bits_per_tag/8)), true);
+    CuckooFilter<char[256], bits_per_tag> filter(filter_size, force);
     // Small hash table storing true negative caused by false positive
     string *sht;
     if(sht_max_buckets > 0)
@@ -94,7 +98,6 @@ int main(int argc, char** argv) {
 			size_t raw_index;
 			uint32_t index, tag;
 
-			mapping_table[record] = 1;
 			//cout << type << ' ' << record << endl;
 			gettimeofday(&start,NULL);
 
@@ -103,11 +106,13 @@ int main(int argc, char** argv) {
 			if (filter.Add(index, tag) == cuckoofilter::NotEnoughSpace) {
 			     cout << "Fail" << endl;
 			     break;
-			}
-			gettimeofday(&end,NULL);
-			insert_t += 1000000 * (end.tv_sec-start.tv_sec)+ end.tv_usec-start.tv_usec;
+			}else{
+				mapping_table[record] = 1;
 
-			num_inserted++;
+				gettimeofday(&end,NULL);
+				insert_t += 1000000 * (end.tv_sec-start.tv_sec)+ end.tv_usec-start.tv_usec;
+				num_inserted++;
+			}
 
 			//MurmurHash3_x86_32(str, 256, 1, &hash1);
 			//cout << hash1 << '\n';

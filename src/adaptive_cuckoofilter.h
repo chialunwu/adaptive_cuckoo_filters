@@ -41,8 +41,6 @@ namespace adaptive_cuckoofilters {
 	template <typename ItemType,
 			  typename NCType,
 			  size_t nc_buckets, 
-			  size_t max_filters, 
-			  size_t single_cf_size,
 			  size_t bits_per_tag>
     class AdaptiveCuckooFilters {
 		// Storage of items
@@ -50,18 +48,23 @@ namespace adaptive_cuckoofilters {
 		CuckooFilter<ItemType, bits_per_tag> *dummy_filter;
 
 		size_t item_bytes;
+		size_t max_filters;
+		size_t single_cf_size;
 
 		// True negative cache
 		NCType nc[nc_buckets];
 		size_t nc_type;
 
 		// Statistics counters
-		size_t rebuild_time[max_filters];
-		size_t fpp[max_filters];
-		size_t lookup[max_filters];
-		size_t insert_keys[max_filters];
+		size_t *rebuild_time;
+		size_t *fpp;
+		size_t *lookup;
+		size_t *lookup_old;
+		size_t *insert_keys;
+		size_t *insert_keys_old;
 
-		size_t overall_fpp, num_grow, num_shrink, true_neg;
+		size_t overall_fpp, all_lookup, all_lookup_old;
+		size_t  num_grow, num_shrink, true_neg;
 
 		// Memory
 		size_t cur_mem;
@@ -113,14 +116,28 @@ namespace adaptive_cuckoofilters {
 		}
 
 public:
-		explicit AdaptiveCuckooFilters(size_t b, size_t mem):overall_fpp(0), cur_mem(0), num_grow(0), num_shrink(0), true_neg(0) {
+		explicit AdaptiveCuckooFilters(size_t b, size_t f, size_t c, size_t mem):overall_fpp(0), cur_mem(0), num_grow(0), num_shrink(0), true_neg(0), all_lookup(0), all_lookup_old(0) {
+			max_filters = f;
+			single_cf_size = c;
+			item_bytes = b;
+
 			filter = new CuckooFilterInterface *[max_filters];
 			dummy_filter = new CuckooFilter<ItemType, bits_per_tag>(4, false);
+
+			rebuild_time = new size_t[max_filters];
+			fpp = new size_t[max_filters];
+			lookup = new size_t[max_filters];
+			lookup_old = new size_t[max_filters];	
+			insert_keys = new size_t[max_filters];
+			insert_keys_old = new size_t[max_filters];
+
 
 			for(size_t i=0; i<max_filters; i++){
 				fpp[i] = 0;
 				lookup[i] = 0;
+				lookup_old[i] = 0;
 				insert_keys[i] = 0;
+				insert_keys_old[i] = 0;
 				rebuild_time[i] = 0;
 				filter[i] = new CuckooFilter<ItemType, bits_per_tag> (single_cf_size, false);
 				cur_mem += filter[i]->SizeInBytes();
@@ -139,7 +156,6 @@ public:
 			else
 				nc_type = NUMERIC;
 
-			item_bytes = b;
 			mem_budget = mem - FixedSizeInBytes();
 		}
 
@@ -155,6 +171,7 @@ public:
 
 		Status Lookup(const ItemType& item, size_t *status, uint32_t *hash1, size_t *r_index, size_t *nc_hash);
 		Status AdaptToFalsePositive(const ItemType& item, const size_t status, const uint32_t hash1, const size_t r_index, const size_t nc_hash);
+
 		Status GrowFilter(const uint32_t idx, vector<ItemType>& keys, bool grow_bucket);
 		bool ShrinkFilter(uint32_t idx, vector<ItemType>& keys);
 
@@ -193,8 +210,11 @@ public:
 		    int min=-1;
 		    uint32_t idx=-1;
 
+//cout << "GetVictim:\n";
 			// Shrink the previous growed filter first
 		    for(uint32_t i=0;i<max_filters;i++){
+//cout << i << ". " << filter[i]->num_buckets << " " << filter[i]->fingerprint_size << " " << filter[i]->num_items << " " << lookup[i] << " " << rebuild_time[i] << endl;
+
 				if(pinned_filter != i && filter[i] != NULL && filter[i]->fingerprint_size != 4 &&
 					(min == -1 || (int)lookup[i] < min) && rebuild_time[i] > 0) {
 					min = lookup[i];
@@ -213,20 +233,44 @@ public:
 				}
 			}
 
+			if(min == -1) {
+				for(uint32_t i=0;i<max_filters;i++){
+//					cout << filter[i]->num_buckets << '/' << filter[i]->fingerprint_size << endl;
+					if(filter[i] != NULL && pinned_filter != i &&
+						(min == -1 || (int)lookup[i] < min)) {
+						min = lookup[i];
+						idx = i;
+					}
+				}
+			}
+//cout << "Choose " << idx << endl;
 			pinned_filter = -1;
 			assert(min != -1);
 			return idx;
+		}
+
+		size_t OptimalFilterSize(uint32_t idx) {
+			size_t new_size = 0;
+			if(all_lookup_old != 0) {
+				new_size = (float)2*insert_keys[idx]/pow(2, filter[idx]->fingerprint_size)*
+						(float)lookup[idx]/all_lookup*
+						(float)all_lookup_old/lookup_old[idx]*
+						filter[idx]->num_buckets*pow(2, filter[idx]->fingerprint_size)/(2*insert_keys_old[idx]);
+			}
+			insert_keys_old[idx] = insert_keys[idx];
+			lookup_old[idx] = lookup[idx];
+			all_lookup_old = all_lookup;
+		
+			return new_size;
 		}
 	};
 
 	template <typename ItemType,
 			  typename NCType,
 			  size_t nc_buckets, 
-			  size_t max_filters, 
-			  size_t single_cf_size,
 			  size_t bits_per_tag>
 	bool
-	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, max_filters, single_cf_size, bits_per_tag>::Add(
+	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, bits_per_tag>::Add(
 			const ItemType& item, uint32_t *hash1) {
 		dummy_filter->GenerateIndexTagHash(item, item_bytes, nc_type==STRING, &raw_index, &index, &tag);
 		*hash1 = raw_index % max_filters;
@@ -259,11 +303,9 @@ public:
 	template <typename ItemType,
 			  typename NCType,
 			  size_t nc_buckets, 
-			  size_t max_filters, 
-			  size_t single_cf_size,
 			  size_t bits_per_tag>
 	Status
-	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, max_filters, single_cf_size, bits_per_tag>::Lookup(
+	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, bits_per_tag>::Lookup(
 			const ItemType& item, size_t *status, uint32_t *hash1, size_t *r_index, size_t *nc_hash) {
 //TODO: change the pointer to reference!!
 		dummy_filter->GenerateIndexTagHash(item, item_bytes, nc_type==STRING, &raw_index, &index, &tag);
@@ -272,6 +314,7 @@ public:
 
 		if (filter[*hash1] != NULL) {
 			lookup[*hash1]++;
+			all_lookup++;
 			*status = filter[*hash1]->Contain(index, tag, r_index);
 //cout<<"Lookup: "<<index<<"/"<<tag<<" "<<*status<<endl;
 			if (*status == cuckoofilter::Ok ||
@@ -290,11 +333,9 @@ public:
 	template <typename ItemType,
 			  typename NCType,
 			  size_t nc_buckets, 
-			  size_t max_filters, 
-			  size_t single_cf_size,
 			  size_t bits_per_tag>
 	bool
-	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, max_filters, single_cf_size, bits_per_tag>::Delete(
+	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, bits_per_tag>::Delete(
 			const ItemType& item) {
 		return true;
 	}
@@ -302,11 +343,9 @@ public:
 	template <typename ItemType,
 			  typename NCType,
 			  size_t nc_buckets, 
-			  size_t max_filters, 
-			  size_t single_cf_size,
 			  size_t bits_per_tag>
 	Status
-	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, max_filters, single_cf_size, bits_per_tag>::
+	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, bits_per_tag>::
 		AdaptToFalsePositive(const ItemType& item, const size_t status, const uint32_t hash1, const size_t r_index, const size_t nc_hash) {
 		fpp[hash1]++;
 		overall_fpp++;
@@ -330,16 +369,14 @@ public:
 	template <typename ItemType,
 			  typename NCType,
 			  size_t nc_buckets, 
-			  size_t max_filters, 
-			  size_t single_cf_size,
 			  size_t bits_per_tag>
 	Status
-	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, max_filters, single_cf_size, bits_per_tag>::GrowFilter(const uint32_t idx, vector<ItemType>& keys, bool grow_bucket) {
+	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, bits_per_tag>::GrowFilter(const uint32_t idx, vector<ItemType>& keys, bool grow_bucket) {
 		size_t ori_mem, new_mem, new_size;
 		size_t fingerprint_size = bits_per_tag;
 
 		bool force = false;
-//cout << "Info: Grow filter " << idx << endl;
+
 		pinned_filter = idx;
 		num_grow ++;
 
@@ -355,6 +392,14 @@ public:
 				fingerprint_size = filter[idx]->fingerprint_size+4;
 				force = true;
 				new_size = filter[idx]->num_buckets;
+
+				//Optimal size
+				size_t optimal_new_size = OptimalFilterSize(idx);
+				if(optimal_new_size > 0 && optimal_new_size > new_size){
+//					fingerprint_size -= 4;
+				//	cout << "Optimal Grow - " << new_size << "  " << optimal_new_size << endl;
+//					new_size = optimal_new_size;
+				}
 			}
 
 			delete filter[idx];
@@ -387,10 +432,12 @@ public:
 		//cout<<"new_:"<<new_mem<<" ori_mem:"<<ori_mem<<endl;
 		//cout<<"new_mem:"<<new_mem<<" ori_mem:"<<ori_mem<<endl;
 
-		//assert(new_mem > ori_mem);
+		assert(new_mem >= ori_mem);
 
 		cur_mem += (new_mem - ori_mem);
 		fpp[idx] = 0;
+
+//cout << "Info: Grow filter " << idx << " mem: " << cur_mem << " ,budget: " << mem_budget << endl;
 
 		for(size_t i=0; i< keys.size(); i++){
 			dummy_filter->GenerateIndexTagHash(keys[i], item_bytes, nc_type==STRING, &raw_index, &index, &tag);
@@ -410,15 +457,13 @@ public:
 	template <typename ItemType,
 			  typename NCType,
 			  size_t nc_buckets, 
-			  size_t max_filters, 
-			  size_t single_cf_size,
 			  size_t bits_per_tag>
 	bool
-	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, max_filters, single_cf_size, bits_per_tag>::
+	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, bits_per_tag>::
 		ShrinkFilter(uint32_t idx, vector<ItemType>& keys) {
-//cout << "Info: Shrink filter " << idx << endl;
 //cout << "Shrink Mem: " << cur_mem << endl;
 		assert(filter[idx] != NULL);
+		pinned_filter = idx;
 
 		size_t ori_mem, new_mem=0;
 		ori_mem = filter[idx]->SizeInBytes();
@@ -426,7 +471,6 @@ public:
 		size_t ori_fp_size = filter[idx]->fingerprint_size;
 		size_t new_fp_size = bits_per_tag;
 
-		
 		//TODO:WTF
 		//size_t new_size = single_cf_size*pow(2,(rebuild_time[idx]-1));
 		//size_t new_size = single_cf_size*rebuild_time[idx];
@@ -443,7 +487,15 @@ public:
 
 		if(new_fp_size < 4){
 			new_fp_size = 4;
+
+
+			size_t optimal_new_size = OptimalFilterSize(idx);
+
+			if(optimal_new_size > 0 && optimal_new_size < new_size) {
+				//new_size = optimal_new_size;
+			}
 		}
+
 		delete filter[idx];
 		filter[idx] = NULL;
 		while(true) {
@@ -465,10 +517,9 @@ public:
 			}
 			new_mem = filter[idx]->SizeInBytes();
 //cout << new_size << endl;
-//cot << "ori_mem: "<<ori_mem<<" new_mem: "<<new_mem<<endl;
 //cout << "ori_fp: "<<ori_fp_size<<" new_fp: "<<new_fp_size<<endl;
-
-			assert(new_mem <= ori_mem);			
+//cout << "new_mem: " << new_mem << " ori_mem: " << ori_mem << endl;
+			assert(new_mem <= ori_mem);
 			for(size_t i=0; i< keys.size(); i++){
 				dummy_filter->GenerateIndexTagHash(keys[i], item_bytes, nc_type==STRING, &raw_index, &index, &tag);
 				if (filter[idx]->Add(index, tag) != cuckoofilter::Ok) {
@@ -486,7 +537,6 @@ public:
 				break;
 			} else {
 				new_size /= 0.9;
-				cout << "TRY again\n";
 			}
 		}
 
@@ -497,7 +547,11 @@ public:
 		fpp[idx] = 0;
 		cur_mem -= (ori_mem - new_mem);
 
-//cout << "cur_mem: " << cur_mem << endl;
+//cout << "Info: Shrink filter " << idx << " mem: " << cur_mem << " ,budget: " << mem_budget << endl;
+//cout << "ori_mem: "<<ori_mem<<" new_mem: "<<new_mem<<endl;
+
+//cout << "Shrink - cur_mem: " << cur_mem  << " budget: " << mem_budget << endl;
+
 
 		if(cur_mem > mem_budget)
 			return false;
@@ -508,11 +562,9 @@ public:
 	template <typename ItemType,
 			  typename NCType,
 			  size_t nc_buckets, 
-			  size_t max_filters, 
-			  size_t single_cf_size,
 			  size_t bits_per_tag>
 	void
-	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, max_filters, single_cf_size, bits_per_tag>::
+	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, bits_per_tag>::
 		DumpStats() const {
 			ofstream f("acf.stat");	
 			if (f.is_open()) {
@@ -526,18 +578,16 @@ public:
 	template <typename ItemType,
 			  typename NCType,
 			  size_t nc_buckets, 
-			  size_t max_filters, 
-			  size_t single_cf_size,
 			  size_t bits_per_tag>
 	bool
-	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, max_filters, single_cf_size, bits_per_tag>::
+	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, bits_per_tag>::
 		LoadStatsToOptimize() {
 			size_t mem_budget_bytes = mem_budget; 
 			ifstream f("acf.stat");
 			string line;
 			size_t i=0, b;
-			size_t l[max_filters];
-			size_t n[max_filters];
+			size_t *l = new size_t[max_filters];
+			size_t *n = new size_t[max_filters];
 			vector<string> tv;
 			if (f.is_open()) {
 				while (getline (f, line) ) {
@@ -580,11 +630,9 @@ public:
 	template <typename ItemType,
 			  typename NCType,
 			  size_t nc_buckets, 
-			  size_t max_filters, 
-			  size_t single_cf_size,
 			  size_t bits_per_tag>
 	void
-	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, max_filters, single_cf_size, bits_per_tag>::
+	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, bits_per_tag>::
 		DumpFilter() const {
 			ofstream f("acf.filter");	
 			if (f.is_open()) {
@@ -601,17 +649,15 @@ public:
 	template <typename ItemType,
 			  typename NCType,
 			  size_t nc_buckets, 
-			  size_t max_filters, 
-			  size_t single_cf_size,
 			  size_t bits_per_tag>
 	bool
-	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, max_filters, single_cf_size, bits_per_tag>::
+	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, bits_per_tag>::
 		LoadFilter() {
 			ifstream f("acf.filter");
 			string line;
 			size_t i=0, b;
-			size_t bs[max_filters];
-			size_t fp[max_filters];
+			size_t *bs = new size_t[max_filters];
+			size_t *fp = new size_t[max_filters];
 			vector<string> tv;
 
 			if (f.is_open()) {
@@ -662,11 +708,9 @@ public:
 	template <typename ItemType,
 			  typename NCType,
 			  size_t nc_buckets, 
-			  size_t max_filters, 
-			  size_t single_cf_size,
 			  size_t bits_per_tag>
 	void
-	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, max_filters, single_cf_size, bits_per_tag>::
+	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, bits_per_tag>::
 		Info() {
 		size_t num_insert=0, num_lookup=0;
 

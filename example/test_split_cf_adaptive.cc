@@ -26,9 +26,17 @@ using namespace std;
 */
 #define STRING
 
+void choose_filter_size(size_t total_items, float overhead, size_t bits_tag, size_t &max_filters, size_t &single_cf_size) {
+	max_filters = ((overhead*total_items*bits_tag)/(0.95*8))/(32-32*overhead);
+	single_cf_size = total_items/max_filters;
+}
+
 // Global variables
-const size_t max_filters = 200;//1700;
-const size_t single_cf_size = 1000;
+size_t max_filters = 0;//1700;
+size_t single_cf_size = 0;
+
+size_t total_items = 170000;
+float overhead = 0.03;
 const size_t bits_per_tag = 8;
 
 const size_t sht_max_buckets = 10;
@@ -37,16 +45,6 @@ const size_t mem_budget = 260000;
 bool grow = true;
 bool shrink = true;
 
-
-#ifdef STRING
-const size_t bytes_per_item = 256;
-bool is_pointer = true;
-vector<vector<string> > busc_table(max_filters);
-#else
-const size_t bytes_per_item = 8;
-bool is_pointer = false;
-vector<vector<size_t> > busc_table(max_filters);
-#endif
 
 #define SHRINK_STRING()\
 		shrink_status=false;\
@@ -113,14 +111,31 @@ int main(int argc, char** argv) {
 // Testing area
 // Test end
 
+	// Decide the filter size
+	choose_filter_size(total_items, overhead, bits_per_tag, max_filters, single_cf_size);
+	cout << "max_filters: " << max_filters << " single_cf_size: " << single_cf_size << endl;
+
+
+#ifdef STRING
+	const size_t bytes_per_item = 256;
+	bool is_pointer = true;
+	vector<vector<string> > busc_table(max_filters);
+#else
+	const size_t bytes_per_item = 8;
+	bool is_pointer = false;
+	vector<vector<size_t> > busc_table(max_filters);
+#endif
+
+
 #ifdef STRING
     map<string, int> mapping_table;
     map<string, int>::iterator iter;  
 
 	// The filter !!!
-    AdaptiveCuckooFilters<char*, string, sht_max_buckets, max_filters, single_cf_size, bits_per_tag> acf(bytes_per_item, mem_budget);
+    AdaptiveCuckooFilters<char*, string, sht_max_buckets, bits_per_tag> acf(bytes_per_item,max_filters, single_cf_size, mem_budget);
     // For simulation, we have to get the hash to store the original keys
     CuckooFilter<char*, bits_per_tag> *dummy_filter = new CuckooFilter<char*, bits_per_tag>(single_cf_size, false);
+	cout << "acf size: " << acf.FilterSizeInBytes() << " bytes\n";
 
 	char record[bytes_per_item];	
 	char **ts = new char*[1000000];
@@ -131,9 +146,10 @@ int main(int argc, char** argv) {
     map<size_t, int>::iterator iter;  
 
 	// The filter !!!
-    AdaptiveCuckooFilters<size_t, size_t, sht_max_buckets, max_filters, single_cf_size, bits_per_tag> acf(bytes_per_item, mem_budget);
+    AdaptiveCuckooFilters<size_t, size_t, sht_max_buckets, bits_per_tag> acf(bytes_per_item, max_filters, single_cf_size, mem_budget);
     // For simulation, we have to get the hash to store the original keys
     CuckooFilter<size_t, bits_per_tag> *dummy_filter = new CuckooFilter<size_t, bits_per_tag>(single_cf_size, false);
+	cout << "acf size: " << acf.FilterSizeInBytes() << " bytes\n";
 
 	size_t record;	
 	size_t *ts = new size_t[1000000];
@@ -186,7 +202,6 @@ int main(int argc, char** argv) {
 #endif
 				
 				if(mapping_table.find(t_record) == mapping_table.end()){
-					mapping_table[t_record] = 1;
 					gettimeofday(&start,NULL);
 
 					if(acf.Add(record, &hash1) == false) {
@@ -202,18 +217,19 @@ int main(int argc, char** argv) {
 							bstatus = acf.Add(record, &hash1);
 						}while(bstatus == false);
 					}else{
+						mapping_table[t_record] = 1;
 						num_inserted++;
 						gettimeofday(&end,NULL);
 						insert_t += 1000000 * (end.tv_sec-start.tv_sec)+ end.tv_usec-start.tv_usec;
+
+						acf_status = acf.Lookup(record, &status, &hash1, &r_index, &sht_hash);
+						assert(acf_status == adaptive_cuckoofilters::Found);
+
+						// Insert info busc table
+						dummy_filter->GenerateIndexTagHash(record, bytes_per_item, is_pointer, &raw_index, &index, &tag);
+						hash1 = raw_index % max_filters;
+						busc_table[hash1].push_back(record);
 					}
-
-					acf_status = acf.Lookup(record, &status, &hash1, &r_index, &sht_hash);
-					assert(acf_status == adaptive_cuckoofilters::Found);
-
-					// Insert info busc table
-					dummy_filter->GenerateIndexTagHash(record, bytes_per_item, is_pointer, &raw_index, &index, &tag);
-					hash1 = raw_index % max_filters;
-					busc_table[hash1].push_back(record);
 				}
 			   }
 			}else if(type == "BoscS:[An]"){
