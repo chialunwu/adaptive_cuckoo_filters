@@ -36,16 +36,17 @@ vector<string> split(const string &s, char delim) {
 
 int main(int argc, char** argv) {
 	size_t sht_max_buckets = 0;
-	size_t mem_budget = 274548;
+	size_t mem_budget = 280000;
 	const size_t bits_per_tag = 12;
 	size_t total_items = 170000;
-	size_t total_lookup = 1000000;
+	size_t total_lookup = 5000000;
 	
 	//mem_budget -= sht_max_buckets*256;
 
 	size_t filter_size = (size_t)(mem_budget/(4*bits_per_tag/8));
-//	size_t filter_size = total_items;
 	bool force = true;
+//	size_t filter_size = total_items;
+//	bool force = false;
 
 	// Create a cuckoo filter where each item is of type size_t and
 	// use 12 bits for each item:

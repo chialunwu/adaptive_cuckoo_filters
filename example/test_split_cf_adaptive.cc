@@ -117,17 +117,17 @@ size_t single_cf_size = 0;
 
 #ifdef STRING
 size_t total_items = 170000;
-size_t mem_budget = 268416;
+size_t mem_budget = 280000;
 #else
 size_t total_items = 10000000;
 size_t mem_budget = 11200000;
 #endif
 
-size_t total_lookup = 1000000;
+size_t total_lookup = 5000000;
 
 float overhead = 0.03;
 const size_t bits_per_tag = 12;
-float filter_ratio = 0.01;
+float filter_ratio = 0.1;
 
 const size_t sht_max_buckets = 10;
 
@@ -371,21 +371,6 @@ int main(int argc, char** argv) {
 			}
     }    
 
-	// Check true positive correctness	
-	for(size_t i=0;i<max_filters;i++){
-		for(size_t j=0; j< busc_table[i].size(); j++) {
-#ifdef STRING
-			bzero(record, 256);
-			strcpy(record, busc_table[i][j].c_str());
-#else
-			record = busc_table[i][j];
-#endif
-			//size_t s = acf.Lookup(record, &status, &hash1, &r_index, &sht_hash);
-	//		assert(s == adaptive_cuckoofilters::Found);
-//			if (s != adaptive_cuckoofilters::Found) cout << record << endl;
-		}
-	}
-
 	acf.DumpStats();
 	acf.DumpFilter();
  
@@ -400,6 +385,23 @@ int main(int argc, char** argv) {
     cout << "True negative : " << true_negative << "\n\n";
 	cout << "Fpp: " << 100*((float)false_queries/(false_queries+true_negative)) << " %\n";
 	acf.Info();
+
+
+	// Check true positive correctness	
+	for(size_t i=0;i<max_filters;i++){
+		for(size_t j=0; j< busc_table[i].size(); j++) {
+#ifdef STRING
+			bzero(record, 256);
+			strcpy(record, busc_table[i][j].c_str());
+#else
+			record = busc_table[i][j];
+#endif
+			size_t s = acf.Lookup(record, &status, &hash1, &r_index, &sht_hash);
+			assert(s == adaptive_cuckoofilters::Found);
+//			if (s != adaptive_cuckoofilters::Found) cout << record << endl;
+		}
+	}
+	cout << "Pass integrity test.\n";
 
     return 0;
  }

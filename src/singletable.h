@@ -147,7 +147,7 @@ namespace cuckoofilter {
 
 			const char f1 = buckets_[i1].bits_[bytes_per_bucket] & 0x01;
 			const char f2 = buckets_[i2].bits_[bytes_per_bucket] & 0x01;
-
+			
 			uint64_t v1 =  *((uint64_t*) p1);
 			uint64_t v2 =  *((uint64_t*) p2);
 

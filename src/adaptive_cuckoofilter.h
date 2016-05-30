@@ -469,7 +469,7 @@ public:
 		//TODO: when to trigger rebuild
 		// Algorithm 1
 
-		size_t threshold = 30;
+		size_t threshold = 15;
 		if(fpp[hash1] > threshold) {
 			return NeedRebuild;
 		}
@@ -511,7 +511,9 @@ public:
 */
 
 			if(!grow_bucket) {
-				if(filter[idx]->fingerprint_size+4 <= 16) {
+				// Algorithm 1
+/*				if(filter[idx]->fingerprint_size+4 <= 16) {
+//cout << "!!!!!!!!!!!!\n";
 					fingerprint_size = filter[idx]->fingerprint_size+4;
 					force = true;
 					new_size = filter[idx]->num_buckets;
@@ -529,6 +531,18 @@ public:
 					new_size = filter[idx]->num_buckets*2;
 					force = true;
 				}
+
+*/
+				// Algorithm 2
+				fingerprint_size = filter[idx]->fingerprint_size;
+				size_t optimal_new_size = IncrementalOptimalFilterSize(idx, fingerprint_size);
+				new_size = filter[idx]->num_buckets+5;
+				force = true;
+				//cout << "ori size: " << new_size << " opt size: " << optimal_new_size << endl;
+				if(optimal_new_size > 0 && optimal_new_size > new_size){
+				//	new_size = optimal_new_size;
+				}
+
 			}else{
 				// Pure caused by insertion error (should be rare)
 				size_t t_new_size = (size_t)(filter[idx]->num_buckets*1.1);
@@ -642,14 +656,12 @@ public:
 */
 
 		// Algorithm 2
-		new_fp_size = ori_fp_size - 4;
+/*		new_fp_size = ori_fp_size - 4;
 		// Just shrink the fingerprint, because this will not read disk
 		force = true;
 		new_size = filter[idx]->num_buckets;
-
-
 		if(new_fp_size < 4) {
-			cout << idx << " shrink to end\n";
+			//cout << idx << " shrink to end\n";
 			new_fp_size = 4;
 			//LAB
 			shrink_end[idx] = true;
@@ -665,13 +677,26 @@ public:
 		//		force = true;
 			}
 		}
+*/
+
+		// Algorithm 3
+		new_fp_size = ori_fp_size;
+		new_size = filter[idx]->num_buckets-5;
+		force = true;
+		if(new_size*4 < keys.size()/0.95) {
+			new_fp_size = ori_fp_size - 4;
+			new_size = filter[idx]->num_buckets;
+			shrink_end[idx] = true;	
+		}
+
+	
 
 		// Evil part: Shrink the bucket! -> May cause false negative now
-		bool evil_shrink = true;
+		bool evil_shrink = false;
 		if(evil_shrink) {
 			new_fp_size = ori_fp_size;
 			new_size = filter[idx]->num_buckets/2;
-			cout << "Shrink to " << new_size << endl;
+			//cout << "Shrink to " << new_size << endl;
 			if(new_size == 0) {
 				new_fp_size = ori_fp_size - 4;
 			}
@@ -713,8 +738,8 @@ public:
 						break;
 
 					 // Just delete the filter
-					cout<< "Shrink fail: "<<idx<<endl;
-					cout << "Bucket: "<<filter[idx]->num_buckets << " Keys:" << keys.size() << endl;
+					//cout<< "Shrink fail: "<<idx<<endl;
+					//cout << "Bucket: "<<filter[idx]->num_buckets << " Keys:" << keys.size() << endl;
 					//assert(false);
 					delete filter[idx];
 					filter[idx] = NULL;
@@ -727,7 +752,7 @@ public:
 				break;
 			} else {
 				new_size /= 0.9;
-				cout << "Try again, cur_mem: " << cur_mem << endl;
+				//cout << "Try again, cur_mem: " << cur_mem << endl;
 			}
 		}
 
@@ -896,7 +921,8 @@ public:
 
 		for(size_t i=0; i<max_filters;i++) {
 			num_insert += insert_keys[i];
-			num_lookup += lookup[i]; 
+			num_lookup += lookup[i];
+			//cout << "Filter " << i << ": " << filter[i]->num_buckets << "/" << filter[i]->fingerprint_size << endl; 
 		}
 
 /*		cout << "NC:\n";
@@ -921,6 +947,7 @@ public:
 			<< "Shrink: " << num_shrink << endl << endl
 		//	<< "fpp: " << 100*(float)overall_fpp/(overall_fpp+true_neg) << " %" << endl
 			<< "Disk access: " << (overall_fpp + num_grow) << endl;
+
 		return;
 	}
 
@@ -954,7 +981,7 @@ cout << i << ". " << filter[i]->num_buckets << " " << filter[i]->fingerprint_siz
 				// Shrink the previous growed filter first
 			    for(uint32_t i=0;i<max_filters;i++){
 					if(pinned_filter != i && filter[i] != NULL  && shrink_end[i]==false&&
-						(min == -1 || (int)lookup[i] < min) && (filter[i]->num_buckets*4 > single_cf_size || filter[i]->fingerprint_size > bits_per_tag) ) {
+						(min == -1 || (int)lookup[i] < min) && (filter[i]->num_buckets*4 > single_cf_size*2 || filter[i]->fingerprint_size > bits_per_tag) ) {
 						min = lookup[i];
 						idx = i;
 					}
