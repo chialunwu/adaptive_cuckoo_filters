@@ -164,8 +164,11 @@ public:
 					t_num_buckets <<= 1;
 				}
 */
-				// Since the revised Cuckoo Filter can have arbatrary num of buckets
-				t_num_buckets = (size_t)(max_num_keys / 0.95) / 4;
+				// Since the revised Cuckoo Filter can have arbatrary num of bucket
+				if(bits_per_item > 4)
+					t_num_buckets = (size_t)(max_num_keys / 0.95) / 4;
+				else
+					t_num_buckets = (size_t)(max_num_keys / 0.8) / 4;
 			} else {
 				// Here, max_num_keys is the bucket size we want to make forcely
 				t_num_buckets = max_num_keys;

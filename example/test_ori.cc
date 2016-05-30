@@ -13,7 +13,7 @@
 using cuckoofilter::CuckooFilter;
 
 int main(int argc, char** argv) {
-    size_t total_items  = 100;
+    size_t total_items  = 1000000;
     size_t sht_max_buckets = 0;
 
     // Timing
@@ -31,7 +31,8 @@ int main(int argc, char** argv) {
     // for each key:
     //   CuckooFilter<size_t, 13, cuckoofilter::PackedTable> filter(total_items);
 
-    CuckooFilter<size_t, 8> filter(32, true);
+    CuckooFilter<size_t, 8> filter(total_items/0.95/4, true);
+    cout << "filter size: " << filter.SizeInBytes() << endl;
 
     // Small hash table storing true negative caused by false positive
     int *sht;
@@ -56,7 +57,7 @@ int main(int argc, char** argv) {
 
     // Check if previously inserted items are in the filter, expected
     // true for all items
-    for (size_t i = 0; i < num_inserted; i++) {
+    for (size_t i = 0; i < total_items; i++) {
 	size_t raw_index, r_index;
 	uint32_t index, tag;
 
