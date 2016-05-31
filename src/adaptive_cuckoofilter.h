@@ -315,22 +315,6 @@ public:
 				}
 			}
 
-			//Ad-hoc solution, shrink to budget 
-/*			cout << "buckets_to_shrink: " << buckets_to_shrink <<endl;
-			while(buckets_to_shrink > 0) {
-				for(size_t i=0; i< max_filters; i++) {
-					if(filter[i]->num_buckets*4 > insert_keys[i]/0.95 + 10) {
-						cur_mem -= filter[i]->SizeInBytes();
-						size_t qq = filter[i]->num_buckets;
-						delete filter[i];
-						filter[i] = new CuckooFilter<ItemType, bits_per_tag> (qq-10, true);
-						cur_mem += filter[i]->SizeInBytes();
-						buckets_to_shrink -= 10;
-		//				cout << buckets_to_shrink << endl;
-					}			
-				}
-			}*/
-
 //cout << "cur_mem: " << cur_mem << endl;
 //cout << "--------------------------------\n";
 
@@ -536,7 +520,7 @@ public:
 				// Algorithm 2
 				fingerprint_size = filter[idx]->fingerprint_size;
 				size_t optimal_new_size = IncrementalOptimalFilterSize(idx, fingerprint_size);
-				new_size = filter[idx]->num_buckets+5;
+				new_size = filter[idx]->num_buckets+10;
 				force = true;
 				//cout << "ori size: " << new_size << " opt size: " << optimal_new_size << endl;
 				if(optimal_new_size > 0 && optimal_new_size > new_size){
@@ -681,10 +665,12 @@ public:
 
 		// Algorithm 3
 		new_fp_size = ori_fp_size;
-		new_size = filter[idx]->num_buckets-5;
+		new_size = filter[idx]->num_buckets-10;
 		force = true;
 		if(new_size*4 < keys.size()/0.95) {
 			new_fp_size = ori_fp_size - 4;
+			if(new_fp_size < 4)
+				new_fp_size = 4;
 			new_size = filter[idx]->num_buckets;
 			shrink_end[idx] = true;	
 		}

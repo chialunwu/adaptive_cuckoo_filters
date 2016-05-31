@@ -34,12 +34,28 @@ vector<string> split(const string &s, char delim) {
 	return elems;
 }
 
+void usage(char *argv0) {
+	fprintf(stderr,"Usage: %s (total insert) (total lookup) (memory budget)\n", argv0);
+}
+
 int main(int argc, char** argv) {
 	size_t sht_max_buckets = 0;
-	size_t mem_budget = 280000;
+	size_t mem_budget = 270000;
 	const size_t bits_per_tag = 12;
-	size_t total_items = 170000;
+	size_t total_items = 168093;
 	size_t total_lookup = 5000000;
+	size_t rebuild_period = 100000;
+
+	/* Arguments */
+	if(argc != 5) {
+		usage(argv[0]);
+		exit(1);
+	}else{
+		total_items = atoi(argv[1]);
+		total_lookup = atoi(argv[2]);
+		mem_budget = atoi(argv[3]);
+	} 
+	/*************/
 	
 	//mem_budget -= sht_max_buckets*256;
 
@@ -62,15 +78,16 @@ int main(int argc, char** argv) {
 
 	CuckooFilter<char[256], bits_per_tag> filter(filter_size, force);
 	cout << "Theory error rate: " << 100*(2.0*total_items/(filter.num_buckets*pow(2, bits_per_tag))) << " %\n";
-	cout << "Filter size(Bytes) : " << filter.SizeInBytes() << " bytes\n";
-	cout << "Avg. bits per item : " << ((float)filter.SizeInBytes()*8/total_items) << endl << endl;
+	cout << "Filter size: " << filter.SizeInBytes() << " bytes\n";
+	cout << "Avg. bits per item : " << ((float)filter.SizeInBytes()*8/total_items) << endl;
+	cout << "===========================================\n";
 
 	// Small hash table storing true negative caused by false positive
 	string *sht;
 	if(sht_max_buckets > 0)
 		sht = new string[sht_max_buckets];
 
-	ifstream infile(argv[1]);
+	ifstream infile(argv[4]);
 	string line;
 
 	uint32_t hash1=0;
@@ -169,11 +186,17 @@ int main(int argc, char** argv) {
 			lookup_t += 1000000 * (end.tv_sec-start.tv_sec)+ end.tv_usec-start.tv_usec;
 			}
 			total_queries++;
+
+            if(total_queries % rebuild_period == 0) {
+  	          cout << "fpp (%): " << 100*((float)false_queries/(false_queries+true_negative)) << endl;
+            }
 		}
 	   }
 	}
 	}	
-	
+
+	cout << "\nFPP (%): " << 100*((float)false_queries/(false_queries+true_negative)) << endl;
+	cout << "===========================================\n";
 
 	// Output the size of the filter in bytes
 	cout << "Insert MOPS : " << (float)num_inserted/insert_t << "\n";

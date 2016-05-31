@@ -12,6 +12,9 @@
 test
 
 *.swp
+*.swn
+
+output/
 
 test_big_cf
 test_big_cf_int

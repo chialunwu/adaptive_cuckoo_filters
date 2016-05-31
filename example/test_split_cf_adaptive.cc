@@ -115,13 +115,8 @@ void choose_filter_size2(float ratio, size_t total_items, size_t &max_filters, s
 size_t max_filters = 0;//1700;
 size_t single_cf_size = 0;
 
-#ifdef STRING
-size_t total_items = 170000;
-size_t mem_budget = 280000;
-#else
-size_t total_items = 10000000;
-size_t mem_budget = 11200000;
-#endif
+size_t total_items = 168093;
+size_t mem_budget = 265410;
 
 size_t total_lookup = 5000000;
 
@@ -155,16 +150,27 @@ vector<string> split(const string &s, char delim) {
     return elems;
 }
 
+void usage(char *argv0) {
+    fprintf(stderr,"Usage: %s (total insert) (total lookup) (memory budget)\n", argv0);
+}
+
 
 int main(int argc, char** argv) {
-// Testing area
-// Test end
-	//mem_budget = total_items/0.95*bits_per_tag/8;
+    /* Arguments */
+    if(argc != 5) {
+        usage(argv[0]);
+        exit(1);
+    }else{
+        total_items = atoi(argv[1]);
+        total_lookup = atoi(argv[2]);
+        mem_budget = atoi(argv[3]);
+    }
+    /*************/
 
 	// Decide the filter size
 	//choose_filter_size(total_items, overhead, bits_per_tag, max_filters, single_cf_size);
 	choose_filter_size2(filter_ratio, total_items, max_filters, single_cf_size);
-	cout << "max_filters: " << max_filters << " single_cf_size: " << single_cf_size << endl;
+//	cout << "max_filters: " << max_filters << " single_cf_size: " << single_cf_size << endl;
 
 
 #ifdef STRING
@@ -186,7 +192,6 @@ int main(int argc, char** argv) {
     AdaptiveCuckooFilters<char*, string, sht_max_buckets, bits_per_tag> acf(bytes_per_item,max_filters, single_cf_size, mem_budget);
     // For simulation, we have to get the hash to store the original keys
     CuckooFilter<char*, bits_per_tag> *dummy_filter = new CuckooFilter<char*, bits_per_tag>(single_cf_size, false);
-	cout << "acf size: " << acf.FilterSizeInBytes() << " bytes\n";
 
 	char record[bytes_per_item];	
 	char **ts = new char*[1000000];
@@ -200,13 +205,18 @@ int main(int argc, char** argv) {
     AdaptiveCuckooFilters<size_t, size_t, sht_max_buckets, bits_per_tag> acf(bytes_per_item, max_filters, single_cf_size, mem_budget);
     // For simulation, we have to get the hash to store the original keys
     CuckooFilter<size_t, bits_per_tag> *dummy_filter = new CuckooFilter<size_t, bits_per_tag>(single_cf_size, false);
-	cout << "acf size: " << acf.FilterSizeInBytes() << " bytes\n";
 
 	size_t record;	
 	size_t *ts = new size_t[1000000];
 #endif
 
-    ifstream infile(argv[1]);
+	cout << "Filter size: " << acf.FilterSizeInBytes() << " bytes\n";
+	cout << "Avg. bits per item : " << ((float)acf.SizeInBytes()*8/total_items) << endl;
+	cout << "===========================================\n";
+
+
+
+    ifstream infile(argv[4]);
     string line;
 
 	// Temp variables
@@ -335,7 +345,7 @@ int main(int argc, char** argv) {
 					/* End Global Optimal Rebuild */
 
 					if(true_total_queries % rebuild_period == 0) {
-						cout << "Fpp: " << 100*((float)false_queries/(false_queries+true_negative)) << " %\n";
+						cout << "fpp (%): " << 100*((float)false_queries/(false_queries+true_negative)) << endl;
 					}
 
 					gettimeofday(&start,NULL);
@@ -373,7 +383,10 @@ int main(int argc, char** argv) {
 
 	acf.DumpStats();
 	acf.DumpFilter();
- 
+
+	cout << "\nFPP (%): " << 100*((float)false_queries/(false_queries+true_negative)) << endl;
+	cout << "===========================================\n";
+
     // Output the size of the filter in bytes
     cout << "\nInsert MOPS : " << (float)num_inserted/insert_t << "\n";
     cout << "Lookup MOPS : " << (float)total_queries/lookup_t << "\n";
@@ -383,7 +396,6 @@ int main(int argc, char** argv) {
   //  cout << "Total queries : " << total_queries << '\n';
 	cout << "False positive : " << false_queries << '\n';
     cout << "True negative : " << true_negative << "\n\n";
-	cout << "Fpp: " << 100*((float)false_queries/(false_queries+true_negative)) << " %\n";
 	acf.Info();
 
 
