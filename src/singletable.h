@@ -21,10 +21,11 @@ namespace cuckoofilter {
 		static const size_t bytes_per_bucket = (bits_per_tag * tags_per_bucket + 7) >> 3;
 
 		struct Bucket {
-			char bits_[bytes_per_bucket+1];
+			char bits_[bytes_per_bucket];
 			// Last 1st bit: false positive
 			// Last 2~5 bit: is_alternative_index
 			//char.bits_[bytes_per_bucket];
+			char extra;
 		} __attribute__((__packed__));
 
 		// using a pointer adds one more indirection
@@ -46,7 +47,7 @@ namespace cuckoofilter {
 		}
 
 		void CleanupTags() { 
-			memset(buckets_, 0, (bytes_per_bucket + 1) * num_buckets);
+			memset(buckets_, 0, (bytes_per_bucket+1) * num_buckets);
 		}
 
 		size_t SizeInBytes() const { return bytes_per_bucket * num_buckets; }
@@ -145,8 +146,8 @@ namespace cuckoofilter {
 			const char* p1 = buckets_[i1].bits_;
 			const char* p2 = buckets_[i2].bits_;
 
-			const char f1 = buckets_[i1].bits_[bytes_per_bucket] & 0x01;
-			const char f2 = buckets_[i2].bits_[bytes_per_bucket] & 0x01;
+			const char f1 = buckets_[i1].extra & 0x01;
+			const char f2 = buckets_[i2].extra & 0x01;
 			
 			uint64_t v1 =  *((uint64_t*) p1);
 			uint64_t v2 =  *((uint64_t*) p2);
@@ -312,24 +313,24 @@ namespace cuckoofilter {
 
 		inline void SetBucketFalsePositive(const size_t i, const bool val) {
 			if (val)
-				buckets_[i].bits_[bytes_per_bucket] |= 0x01;
+				buckets_[i].extra |= 0x01;
 			else
-				buckets_[i].bits_[bytes_per_bucket] &= ~1;
+				buckets_[i].extra &= ~1;
 		}
 
 		inline void SetTagIsAlt(const size_t i, const size_t j, const bool val) {
 			if (val)
-				buckets_[i].bits_[bytes_per_bucket] |= 1 << (j+1);
+				buckets_[i].extra |= 1 << (j+1);
 			else
-				buckets_[i].bits_[bytes_per_bucket] &= ~(1 << (j+1)); 
+				buckets_[i].extra &= ~(1 << (j+1)); 
 		}
 
 		inline bool IsBucketFalsePositive(const size_t i) const {
-			return (buckets_[i].bits_[bytes_per_bucket] & 0x01) == 1;
+			return (buckets_[i].extra & 0x01) == 1;
 		}
 
 		inline bool IsTagAlt(const size_t i, const size_t j) {
-			return (buckets_[i].bits_[bytes_per_bucket] & (1 << (j+1))) > 0;
+			return (buckets_[i].extra & (1 << (j+1))) > 0;
 		}
 	};// SingleTable
 }

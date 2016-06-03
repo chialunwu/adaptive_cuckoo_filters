@@ -191,8 +191,10 @@ public:
 		void Info();
 
 		size_t FixedSizeInBytes() {
-			return 0;
+			//return 0;
 			return nc_buckets*item_bytes;
+			// Pointers(64 bit) + fpp(4 bit) + lookup(32 bit) + negative cache
+			return (100*max_filters/8) + (nc_buckets* item_bytes);
 			// Pointers + stats + negative cache
 			return ((4*max_filters)*sizeof(size_t)) + (nc_buckets * item_bytes);
 //			return ((max_filters)*sizeof(size_t)) + (nc_buckets * item_bytes);
@@ -444,16 +446,16 @@ public:
 		if (filter[hash1] != NULL) {
 			if (status == cuckoofilter::Ok) {
 				filter[hash1]->AdaptFalsePositive(r_index);
-				//InsertNC(nc_hash, item);	// Not Sure if this is needed
+				InsertNC(nc_hash, item);	// Not Sure if this is needed
 			} else if (status == cuckoofilter::NotSure) {
-				//InsertNC(nc_hash, item);
+				InsertNC(nc_hash, item);
 			}
 		}
 
 		//TODO: when to trigger rebuild
 		// Algorithm 1
 
-		size_t threshold = 15;
+		size_t threshold = 30;
 		if(fpp[hash1] > threshold) {
 			return NeedRebuild;
 		}
@@ -481,7 +483,6 @@ public:
 		bool force = false;
 
 		pinned_filter = idx;
-		num_grow ++;
 		shrink_end[idx] = false;
 
 		if(filter[idx] != NULL) {
@@ -495,6 +496,7 @@ public:
 */
 
 			if(!grow_bucket) {
+				num_grow ++;
 				// Algorithm 1
 /*				if(filter[idx]->fingerprint_size+4 <= 16) {
 //cout << "!!!!!!!!!!!!\n";
@@ -520,12 +522,9 @@ public:
 				// Algorithm 2
 				fingerprint_size = filter[idx]->fingerprint_size;
 				size_t optimal_new_size = IncrementalOptimalFilterSize(idx, fingerprint_size);
-				new_size = filter[idx]->num_buckets+10;
+				new_size = filter[idx]->num_buckets+5;
+				//cout << idx << "/" << new_size << endl;
 				force = true;
-				//cout << "ori size: " << new_size << " opt size: " << optimal_new_size << endl;
-				if(optimal_new_size > 0 && optimal_new_size > new_size){
-				//	new_size = optimal_new_size;
-				}
 
 			}else{
 				// Pure caused by insertion error (should be rare)
@@ -665,7 +664,7 @@ public:
 
 		// Algorithm 3
 		new_fp_size = ori_fp_size;
-		new_size = filter[idx]->num_buckets-10;
+		new_size = filter[idx]->num_buckets-5;
 		force = true;
 		if(new_size*4 < keys.size()/0.95) {
 			new_fp_size = ori_fp_size - 4;
@@ -781,6 +780,14 @@ public:
 			}
 			ff.close();
 
+			ofstream fff("acf.fpp");	
+			if (fff.is_open()) {
+				for(size_t i=0; i<max_filters ;i++){
+					if(fpp[i] > 0)
+						fff << fpp[i] << endl;
+				}
+			}
+			fff.close();
 	}
 
 	template <typename ItemType,
@@ -903,12 +910,14 @@ public:
 	void
 	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, bits_per_tag>::
 		Info() {
-		size_t num_insert=0, num_lookup=0;
+		size_t num_insert=0, num_lookup=0, capacity=0;
 
 		for(size_t i=0; i<max_filters;i++) {
 			num_insert += insert_keys[i];
 			num_lookup += lookup[i];
-			//cout << "Filter " << i << ": " << filter[i]->num_buckets << "/" << filter[i]->fingerprint_size << endl; 
+			capacity += filter[i]->num_buckets*4;
+//			cout << "Filter " << i << ": " << filter[i]->num_buckets << "/" << filter[i]->fingerprint_size << endl;
+		//	cout << filter[i]->num_buckets << endl; 
 		}
 
 /*		cout << "NC:\n";
@@ -926,6 +935,7 @@ public:
 			<< "Overhead: " << 100*(float)FixedSizeInBytes()/(FilterSizeInBytes()+FixedSizeInBytes()) << " %" << endl
 			<< "Filters: " << max_filters << endl << endl
 			<< "Insert: " << num_insert << endl
+			<< "Load factor: " << (float)num_insert/capacity << endl 
 		//	<< "Lookup: " << num_lookup << endl
 		//	<< "False Pos: " << overall_fpp << endl
 		//	<< "True Neg: " << true_neg << endl
@@ -985,16 +995,6 @@ cout << i << ". " << filter[i]->num_buckets << " " << filter[i]->fingerprint_siz
 				}
 			}
 
-			if(idx == -1) {
-				for(uint32_t i=0;i<max_filters;i++){
-//					cout << filter[i]->num_buckets << '/' << filter[i]->fingerprint_size << endl;
-					if(filter[i] != NULL && pinned_filter != i && shrink_end[i] == false&&
-						(min == -1 || (int)lookup[i] < min)) {
-						min = lookup[i];
-						idx = i;
-					}
-				}
-			}
 //cout << "Choose " << idx << endl;
 			pinned_filter = -1;
 			assert(idx != -1);

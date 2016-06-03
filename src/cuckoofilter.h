@@ -41,6 +41,7 @@ public:
 		virtual Status Add(const uint32_t i, const uint32_t tag) {return Ok;}
 		virtual Status Contain(const uint32_t i, const uint32_t tag, size_t* index) const{return Ok;}
 		virtual void AdaptFalsePositive(const size_t i){}
+		virtual ~CuckooFilterInterface() {}
 	};
 
 

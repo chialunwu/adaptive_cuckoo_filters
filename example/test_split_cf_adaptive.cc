@@ -108,6 +108,16 @@ void choose_filter_size2(float ratio, size_t total_items, size_t &max_filters, s
 //	single_cf_size = 10000;
 }
 
+void choose_filter_size3(float ratio, size_t mem_budget, size_t bits_tag, size_t &max_filters, size_t &single_cf_size) {
+	size_t total_items = (size_t)(mem_budget*8/bits_tag*0.95);
+	max_filters = (size_t)sqrt(total_items/ratio);
+	single_cf_size = (size_t)max_filters*ratio;
+
+	cout << max_filters << '/' << single_cf_size << endl;
+//	max_filters = 100;
+//	single_cf_size = 10000;
+}
+
 /*******************************************************************/
 #define STRING
 
@@ -170,6 +180,8 @@ int main(int argc, char** argv) {
 	// Decide the filter size
 	//choose_filter_size(total_items, overhead, bits_per_tag, max_filters, single_cf_size);
 	choose_filter_size2(filter_ratio, total_items, max_filters, single_cf_size);
+	//choose_filter_size3(filter_ratio, mem_budget, bits_per_tag, max_filters, single_cf_size);
+
 //	cout << "max_filters: " << max_filters << " single_cf_size: " << single_cf_size << endl;
 
 
@@ -274,9 +286,9 @@ int main(int argc, char** argv) {
 						// Simulate get data from disk
 						do{
 #ifdef STRING
-							GROW_STRING(hash1, true, true);
+							GROW_STRING(hash1, false, true);
 #else
-							GROW(hash1, true, true);
+							GROW(hash1, false, true);
 #endif
 							bstatus = acf.Add(record, &hash1);
 						}while(bstatus == false);
@@ -316,7 +328,7 @@ int main(int argc, char** argv) {
 					if(global_optimize && true_total_queries % rebuild_period == 0) {
 //					if(acf.FilterSizeInBytes()+acf.FixedSizeInBytes() > mem_budget ) {
 						acf.GlobalOptimalFilterSize(NULL, NULL);
-						cout << "Global Optimize: " << acf.SizeInBytes() << " bytes\n";
+						//cout << "Global Optimize: " << acf.SizeInBytes() << " bytes\n";
 						for(size_t i=0;i<max_filters;i++) {
 							//cout << busc_table[i].size() << " keys, capacity:" << acf.getFilterBucket(i)*4 << endl;
 #ifdef STRING
@@ -391,7 +403,7 @@ int main(int argc, char** argv) {
     cout << "\nInsert MOPS : " << (float)num_inserted/insert_t << "\n";
     cout << "Lookup MOPS : " << (float)total_queries/lookup_t << "\n";
 	cout << "Insert fail : " << insert_fail << endl;
-	cout << "Lookup : " << (false_queries + total_queries) << endl;
+	cout << "Lookup : " << (true_total_queries) << endl;
  //   cout << "Inserted items : " << num_inserted << '\n';
   //  cout << "Total queries : " << total_queries << '\n';
 	cout << "False positive : " << false_queries << '\n';
