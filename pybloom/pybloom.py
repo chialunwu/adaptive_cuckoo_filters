@@ -121,6 +121,7 @@ class BloomFilter(object):
 		k1 = math.floor(math.log(2.0)*float(m)/n)
 		k2 = math.ceil(math.log(2.0)*float(m)/n)
 		k = k1 if self._fpp(k1, n, m) < self._fpp(k2, n, m) else k2
+		self.target_fpp = self._fpp(k, n, m)
 
 		error_rate = pow(1 - pow(math.e, -float(k*n)/m), k)
 		self.error_rate = error_rate

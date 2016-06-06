@@ -41,7 +41,7 @@ void usage(char *argv0) {
 int main(int argc, char** argv) {
 	size_t sht_max_buckets = 0;
 	size_t mem_budget = 270000;
-	const size_t bits_per_tag = 12;
+	const size_t bits_per_tag = 8;
 	size_t total_items = 168093;
 	size_t total_lookup = 5000000;
 	size_t rebuild_period = 100000;

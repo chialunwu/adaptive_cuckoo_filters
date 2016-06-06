@@ -37,6 +37,10 @@ namespace adaptive_cuckoofilters {
 		STRING = 11
 	};
 
+	// Parameters
+	const size_t grow_shrink_bucket = 5;
+	const size_t grow_threshold = 30;
+
 	// nc: Negative cache - small hash table
 	template <typename ItemType,
 			  typename NCType,
@@ -134,8 +138,8 @@ public:
 
 			for(size_t i=0; i<max_filters; i++){
 				fpp[i] = 0;
-				lookup[i] = 0;
-				lookup_old[i] = 0;
+				lookup[i] = 1;
+				lookup_old[i] = 1;
 				insert_keys[i] = 0;
 				insert_keys_old[i] = 0;
 				shrink_end[i] = false;
@@ -246,17 +250,25 @@ public:
         	float true_fpp = (float)fpp[idx]/overall_fpp;
         	float target_fpp = (float)(2*filter[idx]->num_items)/(filter[idx]->num_buckets*pow(2, filter[idx]->fingerprint_size));
        	 	float bound = 0.01;
-    	    if(true_fpp > (target_fpp + bound) || true_fpp < (target_fpp - bound)){
-				size_t b = IncrementalOptimalFilterSize(idx, bits_per_tag);
+			size_t b;
+
+    	    if(abs(true_fpp - target_fpp) > bound){
+				b = IncrementalOptimalFilterSize(idx, bits_per_tag);
 				if(b > 0){
+					int delta = b-filter[idx]->num_buckets;
+					//if(delta > 0) cout << "Grow: " << delta << endl;
+					//if(delta < 0) cout << "Shrink: " << delta << endl;
+
 					if(filter[idx] != NULL) {
 						cur_mem -= filter[idx]->SizeInBytes();
 						delete filter[idx];
 						filter[idx] = NULL;
 					}
+
 					//cout << b << endl;
 					filter[idx] = new CuckooFilter<ItemType, bits_per_tag> (b, true);
 					cur_mem += filter[idx]->SizeInBytes();
+
 					return true;
 				}
 	        }
@@ -455,8 +467,10 @@ public:
 		//TODO: when to trigger rebuild
 		// Algorithm 1
 
-		size_t threshold = 30;
-		if(fpp[hash1] > threshold) {
+		float target_fpp = (float)2*filter[hash1]->num_items/(filter[hash1]->num_buckets*pow(2, filter[hash1]->fingerprint_size));
+		float true_fpp = (float)fpp[hash1]/lookup[hash1];
+//		if (true_fpp - target_fpp > grow_threshold) {
+		if(fpp[hash1] > grow_threshold){
 			return NeedRebuild;
 		}
 
@@ -521,8 +535,15 @@ public:
 */
 				// Algorithm 2
 				fingerprint_size = filter[idx]->fingerprint_size;
-				size_t optimal_new_size = IncrementalOptimalFilterSize(idx, fingerprint_size);
-				new_size = filter[idx]->num_buckets+5;
+				if((filter[idx]->num_buckets*4 - filter[idx]->num_items)*filter[idx]->fingerprint_size
+					 >= filter[idx]->num_items*4) {
+					fingerprint_size += 4;
+					new_size = filter[idx]->num_buckets;
+				}else{
+					new_size = filter[idx]->num_buckets+grow_shrink_bucket;
+				}
+				//size_t optimal_new_size = IncrementalOptimalFilterSize(idx, fingerprint_size);
+								//new_size = filter[idx]->num_buckets;
 				//cout << idx << "/" << new_size << endl;
 				force = true;
 
@@ -664,7 +685,7 @@ public:
 
 		// Algorithm 3
 		new_fp_size = ori_fp_size;
-		new_size = filter[idx]->num_buckets-5;
+		new_size = filter[idx]->num_buckets-grow_shrink_bucket;
 		force = true;
 		if(new_size*4 < keys.size()/0.95) {
 			new_fp_size = ori_fp_size - 4;
@@ -977,7 +998,10 @@ cout << i << ". " << filter[i]->num_buckets << " " << filter[i]->fingerprint_siz
 				// Shrink the previous growed filter first
 			    for(uint32_t i=0;i<max_filters;i++){
 					if(pinned_filter != i && filter[i] != NULL  && shrink_end[i]==false&&
-						(min == -1 || (int)lookup[i] < min) && (filter[i]->num_buckets*4 > single_cf_size*2 || filter[i]->fingerprint_size > bits_per_tag) ) {
+						(min == -1 || (int)lookup[i] < min) && 
+//						(filter[i]->num_buckets*4 > single_cf_size*2 || filter[i]->fingerprint_size > bits_per_tag) 
+						((float)filter[i]->num_items/filter[i]->num_buckets*4 < 0.9 || filter[i]->fingerprint_size > bits_per_tag)
+						) {
 						min = lookup[i];
 						idx = i;
 					}

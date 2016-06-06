@@ -72,14 +72,14 @@ using namespace std;
 			strcpy(ts[j], busc_table[ghash][j].c_str()); \
 			sv[j] = (char *)ts[j]; \
 		}\
-		if(acf.InsertKeysToFilter(ghash, sv) == adaptive_cuckoofilters::NeedRebuild && false) {\
+		if(acf.InsertKeysToFilter(ghash, sv) == adaptive_cuckoofilters::NeedRebuild) {\
 			do{\
 				acf_status = acf.GrowFilter(ghash, sv, false);\
 			}while(acf_status == adaptive_cuckoofilters::NeedRebuild);\
 		}
 
 #define INSERT(ghash)\
-		if(acf.InsertKeysToFilter(ghash, busc_table[ghash]) == adaptive_cuckoofilters::NeedRebuild && false) {\
+		if(acf.InsertKeysToFilter(ghash, busc_table[ghash]) == adaptive_cuckoofilters::NeedRebuild) {\
 			do{\
 				acf_status = acf.GrowFilter(ghash, busc_table[ghash], false);\
 			}while(acf_status == adaptive_cuckoofilters::NeedRebuild);\
@@ -141,7 +141,9 @@ bool shrink = true;
 
 bool global_optimize = false;
 bool local_optimize = false;
+
 size_t rebuild_period = 100000;
+size_t inc_rebuild_count = 0;
 /********************************************************************/
 
 vector<string> &split(const string &s, char delim, vector<string> &elems) {
@@ -339,19 +341,23 @@ int main(int argc, char** argv) {
 						}
 					}
 
-					if(local_optimize && true_total_queries % 200000 == 0) {
+					if(local_optimize && true_total_queries % rebuild_period == 0) {
 				//		cout << "Incremental Optimize\n";
-						cout << "Local Optimize\n";
+						//cout << "Local Optimize\n";
 
 						for(size_t i=0;i<max_filters;i++) {
 							//cout << busc_table[i].size() << " keys, capacity:" << acf.getFilterBucket(i)*4 << endl;
 							if(acf.LocalOptimalFilterSize(i)) {
+								inc_rebuild_count ++;
 #ifdef STRING
 								INSERT_STRING(i);
 #else
 								INSERT(i);
 #endif
 							}
+						}
+						if(acf.SizeInBytes() > mem_budget) {
+
 						}
 					}
 					/* End Global Optimal Rebuild */
@@ -407,7 +413,8 @@ int main(int argc, char** argv) {
  //   cout << "Inserted items : " << num_inserted << '\n';
   //  cout << "Total queries : " << total_queries << '\n';
 	cout << "False positive : " << false_queries << '\n';
-    cout << "True negative : " << true_negative << "\n\n";
+    cout << "True negative : " << true_negative << "\n";
+	cout << "Inc rebuild count: " << inc_rebuild_count << "\n\n";
 	acf.Info();
 
 
