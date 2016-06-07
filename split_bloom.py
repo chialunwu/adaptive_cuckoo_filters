@@ -232,15 +232,15 @@ with open(fname, 'r') as f:
 
 print "\nFPP (%%): %f" % (100*(float(false_positives)/(false_positives+true_negative)))
 print "=========================================="
-
-for e in mapping_table:
-	assert sbf.look_up(e, False) is True
-
-
 print "Filter size: %d bytes" % sbf.size_in_bytes()
 print "Total queries: %d" % total_queries
 print "Num inserted: %d" % num_inserted
 print "False positive: %d" % false_positives
 print "True negative: %d" % true_negative
 print "inc_rebuild_count: %d" % inc_rebuild_count
+
+for e in mapping_table:
+	assert sbf.look_up(e, False) is True
+print "Pass integrity test"
+
 

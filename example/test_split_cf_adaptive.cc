@@ -72,7 +72,7 @@ using namespace std;
 			strcpy(ts[j], busc_table[ghash][j].c_str()); \
 			sv[j] = (char *)ts[j]; \
 		}\
-		if(acf.InsertKeysToFilter(ghash, sv) == adaptive_cuckoofilters::NeedRebuild) {\
+		if(acf.InsertKeysToFilter(ghash, sv) == adaptive_cuckoofilters::NeedRebuild && false) {\
 			do{\
 				acf_status = acf.GrowFilter(ghash, sv, false);\
 			}while(acf_status == adaptive_cuckoofilters::NeedRebuild);\
@@ -136,10 +136,10 @@ float filter_ratio = 0.1;
 
 const size_t sht_max_buckets = 10;
 
-bool grow = true;
+bool grow = false;
 bool shrink = true;
 
-bool global_optimize = false;
+bool global_optimize = true;
 bool local_optimize = false;
 
 size_t rebuild_period = 100000;
@@ -181,8 +181,8 @@ int main(int argc, char** argv) {
 
 	// Decide the filter size
 	//choose_filter_size(total_items, overhead, bits_per_tag, max_filters, single_cf_size);
-	choose_filter_size2(filter_ratio, total_items, max_filters, single_cf_size);
-	//choose_filter_size3(filter_ratio, mem_budget, bits_per_tag, max_filters, single_cf_size);
+	//choose_filter_size2(filter_ratio, total_items, max_filters, single_cf_size);
+	choose_filter_size3(filter_ratio, mem_budget, bits_per_tag, max_filters, single_cf_size);
 
 //	cout << "max_filters: " << max_filters << " single_cf_size: " << single_cf_size << endl;
 
@@ -357,7 +357,7 @@ int main(int argc, char** argv) {
 							}
 						}
 						if(acf.SizeInBytes() > mem_budget) {
-
+							SHRINK_STRING();
 						}
 					}
 					/* End Global Optimal Rebuild */
