@@ -127,7 +127,8 @@ class BloomFilter(object):
 		self.error_rate = error_rate
 
 		num_slices = int(math.ceil(math.log(1.0 / error_rate, 2)))
-		bits_per_slice = m/num_slices
+		bits_per_slice = int(math.ceil((float(m)/num_slices)))
+
 		self._setup(error_rate, num_slices, bits_per_slice, n, 0)
 		self.bitarray = bitarray.bitarray(self.num_bits, endian='little')
 		self.bitarray.setall(False)

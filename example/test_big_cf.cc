@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
 	} 
 	/*************/
 	
-	//mem_budget -= sht_max_buckets*256;
+	mem_budget -= sht_max_buckets*256;
 
 	size_t filter_size = (size_t)(mem_budget/(4*bits_per_tag/8));
 	bool force = true;
@@ -76,7 +76,7 @@ int main(int argc, char** argv) {
 	map<string, int> mapping_table;
 	map<string, int>::iterator iter;	
 
-	CuckooFilter<char[256], bits_per_tag> filter(filter_size, force);
+	CuckooFilter<char[256], bits_per_tag> filter(filter_size, force, false);
 	cout << "Theory error rate: " << 100*(2.0*total_items/(filter.num_buckets*pow(2, bits_per_tag))) << " %\n";
 	cout << "Filter size: " << filter.SizeInBytes() << " bytes\n";
 	cout << "Avg. bits per item : " << ((float)filter.SizeInBytes()*8/total_items) << endl;
@@ -128,8 +128,8 @@ int main(int argc, char** argv) {
 			filter.GenerateIndexTagHash(str, 256, true, &raw_index, &index, &tag);
 			//cout << index << '/' << tag << endl;
 			if (filter.Add(index, tag) == cuckoofilter::NotEnoughSpace) {
-				 cout << "Fail" << endl;
-				 break;
+				 //cout << "Fail" << endl;
+				 //break;
 			}else{
 				mapping_table[record] = 1;
 

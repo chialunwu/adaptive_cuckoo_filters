@@ -155,7 +155,7 @@ public:
 		}
 
 //	public:
-		explicit CuckooFilter(const size_t max_num_keys, const bool force) {
+		explicit CuckooFilter(const size_t max_num_keys, const bool force, const bool overlap_mode) {
 			size_t t_num_buckets;
 			if(!force) {
 /*				size_t assoc = 4;
@@ -184,7 +184,10 @@ public:
 		}
 
 		~CuckooFilter() {
-			delete table_;
+			if(table_ != NULL) {
+				delete table_;
+				table_ = NULL;
+			}
 		}
 
 

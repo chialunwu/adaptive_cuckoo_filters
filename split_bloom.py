@@ -108,6 +108,7 @@ class SplitBloomFilter:
 
 	def inc_rebuild(self, idx):
 		opt_m = self._inc_optimal(idx)
+		#print "inc_rebuild: %d" % opt_m
 		if opt_m > 0:
 			self.bf[idx] = BloomFilter(int(opt_m), len(self.mapping_table[idx]))
 		else:
@@ -166,8 +167,8 @@ item_len = 256
 is_number = False
 
 rebuild_period = 10000
-need_global_rebuild = False
-need_inc_rebuild = True
+need_global_rebuild = True
+need_inc_rebuild = False
 inc_rebuild_count = 0
 
 if len(sys.argv) != 5:
@@ -222,7 +223,7 @@ with open(fname, 'r') as f:
 						inc_rebuild_count += 1
 
 			if total_queries % rebuild_period == 0:
-				print "fpp (%%): %f" % (100*(float(false_positives)/(false_positives+true_negative)))
+				print "fpp (%%): %f, mem: %d" % (100*(float(false_positives)/(false_positives+true_negative)), sbf.size_in_bytes())
 
 			status = sbf.look_up(record, true_negative_flag)
 			if status is True and true_negative_flag:

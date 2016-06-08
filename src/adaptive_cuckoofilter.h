@@ -23,14 +23,14 @@ using namespace::cuckoofilter;
 using namespace::std;
 
 namespace adaptive_cuckoofilters {
-    enum Status {
+	enum Status {
 		Found = 0,
 		NotFound = 1,
 		NoFilter = 2,
-        Nothing = 3,
+		Nothing = 3,
 		NeedRebuild = 4,
 		NeedShrink = 5
-    };
+	};
 
 	enum NCType {
 		NUMERIC = 10,
@@ -46,7 +46,7 @@ namespace adaptive_cuckoofilters {
 			  typename NCType,
 			  size_t nc_buckets, 
 			  size_t bits_per_tag>
-    class AdaptiveCuckooFilters {
+	class AdaptiveCuckooFilters {
 		// Storage of items
 		CuckooFilterInterface **filter;
 		CuckooFilter<ItemType, bits_per_tag> *dummy_filter;
@@ -62,13 +62,14 @@ namespace adaptive_cuckoofilters {
 		// Statistics counters
 		size_t *fpp;
 		size_t *lookup;
-		size_t *lookup_old;
+		float *lookup_fr_old;
 		size_t *insert_keys;
 		size_t *insert_keys_old;
 		bool *shrink_end;
 
-		size_t overall_fpp, all_lookup, all_lookup_old;
+		size_t overall_fpp, all_lookup;
 		size_t  num_grow, num_shrink, true_neg;
+		size_t NC_hit;
 
 		// Memory
 		size_t cur_mem;
@@ -120,17 +121,17 @@ namespace adaptive_cuckoofilters {
 		}
 
 public:
-		explicit AdaptiveCuckooFilters(size_t b, size_t f, size_t c, size_t mem):overall_fpp(0), cur_mem(0), num_grow(0), num_shrink(0), true_neg(0), all_lookup(0), all_lookup_old(0) {
+		explicit AdaptiveCuckooFilters(size_t b, size_t f, size_t c, size_t mem):overall_fpp(0), cur_mem(0), num_grow(0), num_shrink(0), true_neg(0), all_lookup(0), NC_hit(0){
 			max_filters = f;
 			single_cf_size = c;
 			item_bytes = b;
 
 			filter = new CuckooFilterInterface *[max_filters];
-			dummy_filter = new CuckooFilter<ItemType, bits_per_tag>(4, false);
+			dummy_filter = new CuckooFilter<ItemType, bits_per_tag>(4, false, false);
 
 			fpp = new size_t[max_filters];
 			lookup = new size_t[max_filters];
-			lookup_old = new size_t[max_filters];	
+			lookup_fr_old = new float[max_filters];	
 			insert_keys = new size_t[max_filters];
 			insert_keys_old = new size_t[max_filters];
 			shrink_end = new bool[max_filters];
@@ -139,12 +140,13 @@ public:
 			for(size_t i=0; i<max_filters; i++){
 				fpp[i] = 0;
 				lookup[i] = 1;
-				lookup_old[i] = 1;
+				lookup_fr_old[i] = max_filters;
 				insert_keys[i] = 0;
 				insert_keys_old[i] = 0;
 				shrink_end[i] = false;
 
-				filter[i] = new CuckooFilter<ItemType, bits_per_tag> (single_cf_size, false);
+				filter[i] = new CuckooFilter<ItemType, bits_per_tag> (single_cf_size, false, false);
+//cout << "new filter: " << i << endl;
 				cur_mem += filter[i]->SizeInBytes();
 			}
 
@@ -165,10 +167,10 @@ public:
 		}
 
 		~AdaptiveCuckooFilters() {
-			for(size_t i=0; i < max_filters; i++) {
+			/*for(size_t i=0; i < max_filters; i++) {
 				delete filter[i];
 			}
-			delete filter;
+			delete filter;*/
 		}
 		
 		bool Add(const ItemType& item, uint32_t *hash1);
@@ -194,6 +196,10 @@ public:
 
 		void Info();
 
+		void SetMemBudget(size_t mem) {
+			mem_budget = mem - FixedSizeInBytes();
+		}
+
 		size_t FixedSizeInBytes() {
 			//return 0;
 			return nc_buckets*item_bytes;
@@ -213,6 +219,7 @@ public:
 				if(filter[i] != NULL)
 					bytes += filter[i]->SizeInBytes();
 			}
+			//cout << "bytes: " << bytes << " cur_mem: " << cur_mem << endl;
 			assert(bytes == cur_mem);
 			return bytes;
 		}
@@ -223,56 +230,54 @@ public:
 
 		size_t IncrementalOptimalFilterSize(uint32_t idx, size_t fingerprint_size) {
 			size_t new_size = 0;
-			if(all_lookup_old != 0) {
-				float t_1 = (float)2*insert_keys[idx]/pow(2, fingerprint_size);
-				float t_2 = (float)lookup[idx]/all_lookup;
-				float t_3 = (float)all_lookup_old/lookup_old[idx];
-				float t_4 = filter[idx]->num_buckets*pow(2, fingerprint_size)/(2*insert_keys_old[idx]);
 
-				//cout << t_1 << " " << t_2 << " " << t_3 << " " << t_4 << endl;
-				//cout << lookup_old[idx] << " " << insert_keys_old[idx] << endl;
-				new_size = t_1*t_2*t_3*t_4;
-			}
+			if (insert_keys_old[idx] == 0)
+				insert_keys_old[idx] = insert_keys[idx];
 
-			for(size_t i=0; i< max_filters; i++) {
-				insert_keys_old[i] = insert_keys[i];
-				lookup_old[i] = lookup[i];
-			}
+			float t_1 = (float)2*insert_keys[idx]/pow(2, fingerprint_size);
+			float t_2 = (float)lookup[idx]/all_lookup;
+			float t_3 = lookup_fr_old[idx];
+			float t_4 = filter[idx]->num_buckets*pow(2, fingerprint_size)/(2*insert_keys_old[idx]);
+
+			//cout << t_1 << " " << t_2 << " " << t_3 << " " << t_4 << endl;
+			//cout << insert_keys_old[idx] << endl;
+			new_size = t_1*t_2*t_3*t_4;
 			
-//			insert_keys_old[idx] = insert_keys[idx];
-//			lookup_old[idx] = lookup[idx];	
-
-			all_lookup_old = all_lookup;
+			insert_keys_old[idx] = insert_keys[idx];
+			lookup_fr_old[idx] = (float)all_lookup/lookup[idx];
 			return new_size;
 		}
 
 		bool LocalOptimalFilterSize(uint32_t idx) {
-        	float true_fpp = (float)fpp[idx]/lookup[idx];
-        	float target_fpp = (float)(2*filter[idx]->num_items)/(filter[idx]->num_buckets*pow(2, filter[idx]->fingerprint_size));
-       	 	float bound = 0.001;
+			float true_fpp = (float)fpp[idx]/lookup[idx];
+			float target_fpp = (float)(2*filter[idx]->num_items)/(filter[idx]->num_buckets*pow(2, filter[idx]->fingerprint_size));
+	   	 	float bound = 0.001;
 			size_t b;
 
-//    	    if(abs(true_fpp - target_fpp) > bound){
-			if(true){
+			if(abs(true_fpp - target_fpp) > bound){
 				b = IncrementalOptimalFilterSize(idx, bits_per_tag);
-				if(b > 0){
-					int delta = b-filter[idx]->num_buckets;
+				if (b > 0) {
+					int delta = b - filter[idx]->num_buckets;
 					//if(delta > 0) cout << "Grow: " << delta << endl;
 					//if(delta < 0) cout << "Shrink: " << delta << endl;
 
-					if(filter[idx] != NULL) {
-						cur_mem -= filter[idx]->SizeInBytes();
-						delete filter[idx];
-						filter[idx] = NULL;
-					}
+					bool overlap_mode;
+					if (b*4 < filter[idx]->num_items/0.95)
+						overlap_mode = true;
+					else
+						overlap_mode = false;
+
+
+					ClearFilter(idx);
 
 					//cout << b << endl;
-					filter[idx] = new CuckooFilter<ItemType, bits_per_tag> (b, true);
+
+					filter[idx] = new CuckooFilter<ItemType, bits_per_tag> (b, true, overlap_mode);
 					cur_mem += filter[idx]->SizeInBytes();
 
 					return true;
 				}
-	        }
+			}
 			return false;
 		}
 		
@@ -310,22 +315,28 @@ public:
 			for(size_t i=0 ;i<max_filters; i++) {
 //cout << "l: " << l[i] << " n: " << n[i] << " z1: " << z1 << endl;
 				b = (size_t)sqrt(l[i]*n[i]/z1);
-//cout << b << endl;
+				//cout << "capacity: " << b*4 << " items: " << filter[i]->num_items << endl;
 
 				// TODO: 4b[i] > n[i] constraint not satisfied
 				//assert(b*4 >= insert_keys[i]);
-				/*if(b*4 < insert_keys[i]) {
+				/*if(b*4 < insert_keys[i]/0.95) {
 					size_t qq = filter[i]->num_buckets;
-					buckets_to_shrink += qq-b;
 					b = qq;
-				}*/
-				
+				}*/				
 //				b = filter[i]->num_buckets;
-				ClearFilter(i);			
+//
+				bool overlap_mode;
+				if (filter[i] != NULL && b*4 < filter[i]->num_items/0.95)
+					overlap_mode = true;
+				else
+					overlap_mode = false;
+
+				ClearFilter(i);	
 	
 				sum += b*4*bits_per_tag/8;
 				if(b > 0) {
-					filter[i] = new CuckooFilter<ItemType, bits_per_tag> (b, true);
+					filter[i] = new CuckooFilter<ItemType, bits_per_tag> (b, true, overlap_mode);
+//cout << "new filter: " << i << endl;
 					cur_mem += filter[i]->SizeInBytes();
 				}
 			}
@@ -339,6 +350,7 @@ public:
 
 		void ClearFilter(size_t i) {
 			if(filter[i] != NULL) {
+				//cout << "delete filter: " << i << " mem: " << SizeInBytes() <<  endl;
 				cur_mem -= filter[i]->SizeInBytes();
 				delete filter[i];
 				filter[i] = NULL;
@@ -358,9 +370,8 @@ public:
 		void ClearAllCounter() {
 			for(size_t i=0;i<max_filters;i++) {
 				lookup[i] = 0;
-				lookup_old[i] = 0;
+				lookup_fr_old[i] = 0;
 				all_lookup = 0;
-				all_lookup_old = 0;
 			//	fpp[i] = 0;
 			}
 		}
@@ -422,10 +433,18 @@ public:
 		all_lookup++;
 		if (filter[*hash1] != NULL) {
 			*status = filter[*hash1]->Contain(index, tag, r_index);
+//cout << "2\n";
 //cout<<"Lookup: "<<index<<"/"<<tag<<" "<<*status<<endl;
-			if (*status == cuckoofilter::Ok ||
-				(*status == cuckoofilter::NotSure && !CompareNC(*nc_hash, item))){
+			if (*status == cuckoofilter::Ok) {
 				return Found;
+			}else if (*status == cuckoofilter::NotSure) {
+				if (CompareNC(*nc_hash, item)) {
+					NC_hit++;
+					true_neg++;
+					return NotFound;
+				}else{
+					return Found;
+				}
 			}else{
 				true_neg++;
 				return NotFound;
@@ -468,10 +487,17 @@ public:
 		//TODO: when to trigger rebuild
 		// Algorithm 1
 
-		float target_fpp = (float)2*filter[hash1]->num_items/(filter[hash1]->num_buckets*pow(2, filter[hash1]->fingerprint_size));
+		float target_fpp;
+		if ( filter[hash1] != NULL )
+			target_fpp = (float)2*filter[hash1]->num_items/(filter[hash1]->num_buckets*pow(2, filter[hash1]->fingerprint_size));
+		else
+			target_fpp = 1.0;
 		float true_fpp = (float)fpp[hash1]/lookup[hash1];
-		if (true_fpp - target_fpp > 0.05) {
-//		if(fpp[hash1] > grow_threshold){
+
+//		if (target_fpp == 1.0 || true_fpp > target_fpp) {
+//		if(fpp[hash1] > 
+		if(fpp[hash1] > grow_threshold){
+//			cout << "true_fpp: " << true_fpp << " target_fpp: " << target_fpp << endl;
 			return NeedRebuild;
 		}
 
@@ -496,6 +522,7 @@ public:
 		size_t fingerprint_size = bits_per_tag;
 
 		bool force = false;
+		bool overlap_mode = false;
 
 		pinned_filter = idx;
 		shrink_end[idx] = false;
@@ -542,13 +569,15 @@ public:
 					fingerprint_size += 4;
 					new_size = filter[idx]->num_buckets;
 				}else{
+					size_t optimal_new_size = IncrementalOptimalFilterSize(idx, fingerprint_size);
+	
 					new_size = filter[idx]->num_buckets+grow_shrink_bucket;
+					if(false && optimal_new_size > filter[idx]->num_buckets) {
+						new_size = optimal_new_size;
+						cout << "opt: " << optimal_new_size << " ori: " << filter[idx]->num_buckets << endl;
+					}
 				}
-				//size_t optimal_new_size = IncrementalOptimalFilterSize(idx, fingerprint_size);
-								//new_size = filter[idx]->num_buckets;
-				//cout << idx << "/" << new_size << endl;
 				force = true;
-
 			}else{
 				// Pure caused by insertion error (should be rare)
 				size_t t_new_size = (size_t)(filter[idx]->num_buckets*1.1);
@@ -559,8 +588,10 @@ public:
 				force = true;
 			}
 
-			delete filter[idx];
-			filter[idx] = NULL;	
+			if (new_size*4 < filter[idx]->num_items/0.95)
+				overlap_mode = true;
+
+			ClearFilter(idx);	
 		} else {
 			ori_mem = 0;
 			new_size = single_cf_size;
@@ -568,23 +599,25 @@ public:
 
 		switch(fingerprint_size){
 			case 4:
-				filter[idx] = new CuckooFilter<ItemType, 4> (new_size, force);
+				filter[idx] = new CuckooFilter<ItemType, 4> (new_size, force, overlap_mode);
 				break;
 			case 8:
-				filter[idx] = new CuckooFilter<ItemType, 8> (new_size, force);
+				filter[idx] = new CuckooFilter<ItemType, 8> (new_size, force, overlap_mode);
 				break;
 			case 12:
-				filter[idx] = new CuckooFilter<ItemType, 12> (new_size, force);
+				filter[idx] = new CuckooFilter<ItemType, 12> (new_size, force, overlap_mode);
 				break;
 			case 16:
-				filter[idx] = new CuckooFilter<ItemType, 16> (new_size, force);
+				filter[idx] = new CuckooFilter<ItemType, 16> (new_size, force, overlap_mode);
 				break;
 			case 32:
-				filter[idx] = new CuckooFilter<ItemType, 32> (new_size, force);
+				filter[idx] = new CuckooFilter<ItemType, 32> (new_size, force, overlap_mode);
 				break;
 			default:
 				assert(false);
 		}
+
+//cout << "new filter: " << idx << endl;
 		
 		new_mem = filter[idx]->SizeInBytes();
 
@@ -594,7 +627,7 @@ public:
 
 		assert(new_mem >= ori_mem);
 
-		cur_mem += (new_mem - ori_mem);
+		cur_mem += filter[idx]->SizeInBytes();;
 		fpp[idx] = 0;
 
 //cout << "Info: Grow filter " << idx << " mem: " << cur_mem << " ,budget: " << mem_budget << endl;
@@ -608,7 +641,7 @@ public:
 			}
 		}
 		
-		if(cur_mem > mem_budget){
+		if(cur_mem*1.1 > mem_budget){
 			return NeedShrink;
 		} else {
 			return Nothing;
@@ -642,6 +675,7 @@ public:
 
 		size_t new_size;
 		bool force;
+		bool overlap_mode = false;
 
 		//TODO:WTF
 		//size_t new_size = single_cf_size*pow(2,(rebuild_time[idx]-1));
@@ -712,30 +746,33 @@ public:
 			}
 		}
 
-		delete filter[idx];
-		filter[idx] = NULL;
+		if (force && new_size*4 < filter[idx]->num_items/0.95)
+			overlap_mode = true;
+
+		ClearFilter(idx);
 		while(true) {
 			switch(new_fp_size){
 				case 4:
-					filter[idx] = new CuckooFilter<ItemType, 4> (new_size, force);
+					filter[idx] = new CuckooFilter<ItemType, 4> (new_size, force, overlap_mode);
 					break;
 				case 8:
-					filter[idx] = new CuckooFilter<ItemType, 8> (new_size, force);
+					filter[idx] = new CuckooFilter<ItemType, 8> (new_size, force, overlap_mode);
 					break;
 				case 12:
-					filter[idx] = new CuckooFilter<ItemType, 12> (new_size, force);
+					filter[idx] = new CuckooFilter<ItemType, 12> (new_size, force, overlap_mode);
 					break;
 				case 16:
-					filter[idx] = new CuckooFilter<ItemType, 16> (new_size, force);
+					filter[idx] = new CuckooFilter<ItemType, 16> (new_size, force, overlap_mode);
 					break;
 				case 32:
-					filter[idx] = new CuckooFilter<ItemType, 32> (new_size, force);
+					filter[idx] = new CuckooFilter<ItemType, 32> (new_size, force, overlap_mode);
 					break;
 				default:
 					assert(false);
 			}
 			new_mem = filter[idx]->SizeInBytes();
 
+//cout << "new filter: " << idx << endl;
 //cout << new_size << endl;
 //cout << "ori_fp: "<<ori_fp_size<<" new_fp: "<<new_fp_size<<endl;
 //cout << "new_mem: " << new_mem << " ori_mem: " << ori_mem << endl;
@@ -761,14 +798,14 @@ public:
 			if(filter[idx] != NULL) {
 				break;
 			} else {
-				new_size /= 0.9;
-				//cout << "Try again, cur_mem: " << cur_mem << endl;
+				new_size = ceil(new_size/0.9);
+//				cout << "Try again, cur_mem: " << cur_mem << endl;
 			}
 		}
 
 		// Update stats
 		fpp[idx] = 0;
-		cur_mem -= (ori_mem - new_mem);
+		cur_mem += filter[idx]->SizeInBytes();
 
 //cout << "Info: Shrink filter " << idx << " mem: " << cur_mem << " ,budget: " << mem_budget << endl;
 //cout << "ori_mem: "<<ori_mem<<" new_mem: "<<new_mem<<endl;
@@ -776,7 +813,7 @@ public:
 //cout << "Shrink - cur_mem: " << cur_mem  << " budget: " << mem_budget << endl;
 
 
-		if(cur_mem > mem_budget)
+		if(cur_mem*1.1 > mem_budget)
 			return false;
 		else
 			return true;
@@ -903,19 +940,19 @@ public:
 				if(bs[i] > 0){
 					switch(fp[i]){
 						case 4:
-							filter[i] = new CuckooFilter<ItemType, 4> (bs[i], true);
+							filter[i] = new CuckooFilter<ItemType, 4> (bs[i], true, false);
 							break;
 						case 8:
-							filter[i] = new CuckooFilter<ItemType, 8> (bs[i], true);
+							filter[i] = new CuckooFilter<ItemType, 8> (bs[i], true, false);
 							break;
 						case 12:
-							filter[i] = new CuckooFilter<ItemType, 12> (bs[i], true);
+							filter[i] = new CuckooFilter<ItemType, 12> (bs[i], true, false);
 							break;
 						case 16:
-							filter[i] = new CuckooFilter<ItemType, 16> (bs[i], true);
+							filter[i] = new CuckooFilter<ItemType, 16> (bs[i], true, false);
 							break;
 						case 32:
-							filter[i] = new CuckooFilter<ItemType, 32> (bs[i], true);
+							filter[i] = new CuckooFilter<ItemType, 32> (bs[i], true, false);
 							break;
 						default:
 							assert(false);
@@ -940,8 +977,10 @@ public:
 		for(size_t i=0; i<max_filters;i++) {
 			num_insert += insert_keys[i];
 			num_lookup += lookup[i];
-			capacity += filter[i]->num_buckets*4;
-//			cout << "Filter " << i << ": " << filter[i]->num_buckets << "/" << filter[i]->fingerprint_size << endl;
+			if(filter[i] != NULL)
+				capacity += filter[i]->num_buckets*4;
+
+			//cout << "Filter " << i << ": " << filter[i]->num_buckets << "/" << filter[i]->fingerprint_size << endl;
 		//	cout << filter[i]->num_buckets << endl; 
 		}
 
@@ -960,7 +999,8 @@ public:
 			<< "Overhead: " << 100*(float)FixedSizeInBytes()/(FilterSizeInBytes()+FixedSizeInBytes()) << " %" << endl
 			<< "Filters: " << max_filters << endl << endl
 			<< "Insert: " << num_insert << endl
-			<< "Load factor: " << (float)num_insert/capacity << endl 
+			<< "Load factor: " << (float)num_insert/capacity << endl
+			<< "NC hit: " << NC_hit << endl 
 		//	<< "Lookup: " << num_lookup << endl
 		//	<< "False Pos: " << overall_fpp << endl
 		//	<< "True Neg: " << true_neg << endl
@@ -981,12 +1021,12 @@ public:
 		GetVictimFilter() {
 			//TODO: Choose the right victim
 			// Choose the least lookuped one
-		    int min=-1, max = 0;
-		    uint32_t idx=-1;
+			int min=-1, max = 0;
+			uint32_t idx=-1;
 
 			if(idx == -1) {
 				// Shrink the previous growed filter first
-			    for(uint32_t i=0;i<max_filters;i++){
+				for(uint32_t i=0;i<max_filters;i++){
 					if(pinned_filter != i && filter[i] != NULL  && shrink_end[i]==false&&
 						(min == -1 || (int)lookup[i] < min) && 
 //						(filter[i]->num_buckets*4 > single_cf_size*2 || filter[i]->fingerprint_size > bits_per_tag) 
@@ -995,7 +1035,7 @@ public:
 						min = lookup[i];
 						idx = i;
 					}
-			    }
+				}
 			}
 
 			// Seems better
@@ -1016,7 +1056,7 @@ public:
 			}
 //cout << "Choose " << idx << endl;
 			pinned_filter = -1;
-			//assert(idx != -1);
+			assert(idx != -1);
 			return idx;
 		}
 
@@ -1033,7 +1073,7 @@ public:
 		}
 		for(size_t i=0; i< keys.size(); i++){
 			dummy_filter->GenerateIndexTagHash(keys[i], item_bytes, nc_type==STRING, &raw_index, &index, &tag);
-			if (filter[idx]->Add(index, tag) != cuckoofilter::Ok) {
+			if (filter[idx]->Add(index, tag) == cuckoofilter::NotEnoughSpace) {
 				// Shit, bad luck
 				return NeedRebuild;
 			}

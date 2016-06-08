@@ -74,14 +74,14 @@ using namespace std;
 		}\
 		if(acf.InsertKeysToFilter(ghash, sv) == adaptive_cuckoofilters::NeedRebuild && false) {\
 			do{\
-				acf_status = acf.GrowFilter(ghash, sv, false);\
+				acf_status = acf.GrowFilter(ghash, sv, true);\
 			}while(acf_status == adaptive_cuckoofilters::NeedRebuild);\
 		}
 
 #define INSERT(ghash)\
 		if(acf.InsertKeysToFilter(ghash, busc_table[ghash]) == adaptive_cuckoofilters::NeedRebuild) {\
 			do{\
-				acf_status = acf.GrowFilter(ghash, busc_table[ghash], false);\
+				acf_status = acf.GrowFilter(ghash, busc_table[ghash], true);\
 			}while(acf_status == adaptive_cuckoofilters::NeedRebuild);\
 		}
 
@@ -101,6 +101,8 @@ void choose_filter_size(size_t total_items, float overhead, size_t bits_tag, siz
 
 void choose_filter_size2(float ratio, size_t total_items, size_t &max_filters, size_t &single_cf_size) {
 	max_filters = (size_t)sqrt(total_items/ratio);
+
+	// Because split cuckoo filters has uneven insert, for expiriment, lookup after all insert, so insert to tight as best as we can
 	single_cf_size = (size_t)max_filters*ratio;
 
 	cout << max_filters << '/' << single_cf_size << endl;
@@ -132,14 +134,14 @@ size_t total_lookup = 5000000;
 
 float overhead = 0.03;
 const size_t bits_per_tag = 12;
-float filter_ratio = 0.1;
+float filter_ratio = 0.01;
 
 const size_t sht_max_buckets = 10;
 
-bool grow = false;
+bool grow = true;
 bool shrink = true;
 
-bool global_optimize = true;
+bool global_optimize = false;
 bool local_optimize = false;
 
 size_t rebuild_period = 100000;
@@ -181,8 +183,8 @@ int main(int argc, char** argv) {
 
 	// Decide the filter size
 	//choose_filter_size(total_items, overhead, bits_per_tag, max_filters, single_cf_size);
-	//choose_filter_size2(filter_ratio, total_items, max_filters, single_cf_size);
-	choose_filter_size3(filter_ratio, mem_budget, bits_per_tag, max_filters, single_cf_size);
+	choose_filter_size2(filter_ratio, total_items, max_filters, single_cf_size);
+	//choose_filter_size3(filter_ratio, mem_budget, bits_per_tag, max_filters, single_cf_size);
 
 //	cout << "max_filters: " << max_filters << " single_cf_size: " << single_cf_size << endl;
 
@@ -205,7 +207,7 @@ int main(int argc, char** argv) {
 	// The filter !!!
     AdaptiveCuckooFilters<char*, string, sht_max_buckets, bits_per_tag> acf(bytes_per_item,max_filters, single_cf_size, mem_budget);
     // For simulation, we have to get the hash to store the original keys
-    CuckooFilter<char*, bits_per_tag> *dummy_filter = new CuckooFilter<char*, bits_per_tag>(single_cf_size, false);
+    CuckooFilter<char*, bits_per_tag> *dummy_filter = new CuckooFilter<char*, bits_per_tag>(single_cf_size, false, false);
 
 	char record[bytes_per_item];	
 	char **ts = new char*[1000000];
@@ -218,17 +220,11 @@ int main(int argc, char** argv) {
 	// The filter !!!
     AdaptiveCuckooFilters<size_t, size_t, sht_max_buckets, bits_per_tag> acf(bytes_per_item, max_filters, single_cf_size, mem_budget);
     // For simulation, we have to get the hash to store the original keys
-    CuckooFilter<size_t, bits_per_tag> *dummy_filter = new CuckooFilter<size_t, bits_per_tag>(single_cf_size, false);
+    CuckooFilter<size_t, bits_per_tag> *dummy_filter = new CuckooFilter<size_t, bits_per_tag>(single_cf_size, false, false);
 
 	size_t record;	
 	size_t *ts = new size_t[1000000];
 #endif
-
-	cout << "Filter size: " << acf.FilterSizeInBytes() << " bytes\n";
-	cout << "Avg. bits per item : " << ((float)acf.SizeInBytes()*8/total_items) << endl;
-	cout << "===========================================\n";
-
-
 
     ifstream infile(argv[4]);
     string line;
@@ -288,9 +284,9 @@ int main(int argc, char** argv) {
 						// Simulate get data from disk
 						do{
 #ifdef STRING
-							GROW_STRING(hash1, false, true);
+							GROW_STRING(hash1, true, true);
 #else
-							GROW(hash1, false, true);
+							GROW(hash1, true, true);
 #endif
 							bstatus = acf.Add(record, &hash1);
 						}while(bstatus == false);
@@ -322,9 +318,25 @@ int main(int argc, char** argv) {
 					size_t t_record = record;
 #endif
 
+					if(true_total_queries % rebuild_period == 0) {
+						if(true_total_queries == 0) {
+							cout << "Filter size: " << acf.SizeInBytes() << " bytes\n";
+							cout << "Avg. bits per item : " << ((float)acf.SizeInBytes()*8/total_items) << endl;
+							cout << "===========================================\n";
+
+							acf.SetMemBudget(acf.SizeInBytes());
+							cout << "Set new mem budget: " << acf.SizeInBytes() << endl;
+						}
+
+						cout << "fpp (%): " << 100*((float)false_queries/(false_queries+true_negative)) << 
+								", mem: " << acf.SizeInBytes() << endl;
+						//cout << "mem: " << acf.SizeInBytes() << endl;						
+					}
+//cout << "1.5\n";
+//cout << t_record <<  endl;
 					bool true_negative_flag = (mapping_table.find(t_record) == mapping_table.end());
 					adaptive_cuckoofilters::Status acf_status;
-
+//cout << "1.6\n";
 					/* Global Optimal Rebuild */
 					true_total_queries++;
 					if(global_optimize && true_total_queries % rebuild_period == 0) {
@@ -344,7 +356,6 @@ int main(int argc, char** argv) {
 					if(local_optimize && true_total_queries % rebuild_period == 0) {
 				//		cout << "Incremental Optimize\n";
 						//cout << "Local Optimize\n";
-
 						for(size_t i=0;i<max_filters;i++) {
 							//cout << busc_table[i].size() << " keys, capacity:" << acf.getFilterBucket(i)*4 << endl;
 							if(acf.LocalOptimalFilterSize(i)) {
@@ -357,17 +368,15 @@ int main(int argc, char** argv) {
 							}
 						}
 						if(acf.SizeInBytes() > mem_budget) {
-							SHRINK_STRING();
+//							SHRINK_STRING();
 						}
 					}
 					/* End Global Optimal Rebuild */
 
-					if(true_total_queries % rebuild_period == 0) {
-						cout << "fpp (%): " << 100*((float)false_queries/(false_queries+true_negative)) << endl;
-					}
-
 					gettimeofday(&start,NULL);
+//cout << "start lookup\n";
 					acf_status = acf.Lookup(record, &status, &hash1, &r_index, &sht_hash);
+//cout << "2\n";
 					if(acf_status == adaptive_cuckoofilters::Found
 						&& true_negative_flag){
 						false_queries++;
@@ -395,6 +404,7 @@ int main(int argc, char** argv) {
 					}else if(acf_status == adaptive_cuckoofilters::NotFound && true_negative_flag){
 						true_negative++;
 					}
+//cout << "end lookup\n";
 			   }
 			}
     }    
