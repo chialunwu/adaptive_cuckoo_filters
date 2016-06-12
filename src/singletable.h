@@ -87,6 +87,18 @@ namespace cuckoofilter {
 				p += (j << 1);
 				tag = *((uint16_t*) p);
 			}
+			else if (bits_per_tag == 20) {
+				p += (j << 1) + (j >> 1);
+				tag = *((uint32_t*) p) >> ((j & 1) << 2);
+			}
+			else if (bits_per_tag == 24) {
+				p += j*3;
+				tag = *((uint32_t*) p);
+			}
+			else if (bits_per_tag == 28) {
+				p += (j * 3) + (j >> 1);
+				tag = *((uint32_t*) p) >> ((j & 1) << 2);
+			}
 			else if (bits_per_tag == 32) {
 				tag = ((uint32_t*) p)[j];
 			}
@@ -128,6 +140,33 @@ namespace cuckoofilter {
 			}
 			else if (bits_per_tag == 16) {
 				((uint16_t*) p)[j] = tag;
+			}
+			else if (bits_per_tag == 20) {
+				p += (j << 1) + (j >> 1);
+				if ( (j & 1) == 0) {
+					((uint32_t*) p)[0] &= 0xfff00000;;
+					((uint32_t*) p)[0] |= tag;
+				}
+				else {
+					((uint32_t*) p)[0] &= 0xff00000f;
+					((uint32_t*) p)[0] |= (tag << 4);
+				}
+			}
+			else if (bits_per_tag == 24) {
+				p += j*3;
+				((uint32_t*) p)[0] &= 0xff000000;
+				((uint32_t*) p)[0] |= tag;
+			}
+			else if (bits_per_tag == 28) {
+				p += (j * 3) + (j >> 1);
+				if ( (j & 1) == 0) {
+					((uint32_t*) p)[0] &= 0xf0000000;
+					((uint32_t*) p)[0] |= tag;
+				}
+				else {
+					((uint32_t*) p)[0] &= 0x0000000f;
+					((uint32_t*) p)[0] |= (tag << 4);
+				}
 			}
 			else if (bits_per_tag == 32) {
 				((uint32_t*) p)[j] = tag;
