@@ -15,6 +15,7 @@ test
 *.swn
 
 output/
+paper_result/
 
 test_big_cf
 test_big_cf_int

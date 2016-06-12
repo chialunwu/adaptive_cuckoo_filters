@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from pybloom import BloomFilter
 import sys
 import math
@@ -103,7 +104,7 @@ class SplitBloomFilter:
 					else:
 						self.bf[i].add(int(n))
 
-		self.target_fpp = [b.target_fpp for b in self.bf]
+		self.target_fpp = [b.target_fpp if b is not None else 1.0 for b in self.bf]
 		self.old_fr = [float(l)/total_lookup for l in self.lookup]
 
 	def inc_rebuild(self, idx):
@@ -182,7 +183,7 @@ else:
 ##############################################################################
 sbf = SplitBloomFilter(num_filters, total_bytes*8, total_items)
 
-print "Filter size: %d bytes" % (sbf.size_in_bytes())
+print "Initial filter size: %d bytes" % (sbf.size_in_bytes())
 print "Avg. bits per item: %f" % (float(sbf.size_in_bytes())*8/total_items)
 
 mapping_table = {}

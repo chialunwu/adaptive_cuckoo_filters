@@ -995,7 +995,7 @@ public:
 
 		cout << "Adaptive Cuckoo Filters Status:\n"
 			<< "Size: " << SizeInBytes() << " bytes\n"
-			<< "Filter Size: " << FilterSizeInBytes() << " bytes\n"
+			<< "Filter size: " << FilterSizeInBytes() << " bytes\n"
 			<< "Overhead: " << 100*(float)FixedSizeInBytes()/(FilterSizeInBytes()+FixedSizeInBytes()) << " %" << endl
 			<< "Filters: " << max_filters << endl << endl
 			<< "Insert: " << num_insert << endl

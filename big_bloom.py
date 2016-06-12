@@ -1,6 +1,6 @@
+#!/usr/bin/env python
 from pybloom import BloomFilter
 import sys
-
 
 def padding_zero(s, length):
 	if len(s) > length:
@@ -36,7 +36,7 @@ else:
 bf = BloomFilter(total_byte*8, total_items)
 
 print "Theory error rate: %f %%" % (100*bf.theory_error_rate())
-print "Filter size: %d bytes" % (bf.num_bits/8)
+print "Initial filter size: %d bytes" % (bf.num_bits/8)
 print "Avg. bits per item: %f" % (float(bf.num_bits)/total_items)
 
 mapping_table = {}

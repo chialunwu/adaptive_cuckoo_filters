@@ -320,7 +320,7 @@ int main(int argc, char** argv) {
 
 					if(true_total_queries % rebuild_period == 0) {
 						if(true_total_queries == 0) {
-							cout << "Filter size: " << acf.SizeInBytes() << " bytes\n";
+							cout << "Initial filter size: " << acf.SizeInBytes() << " bytes\n";
 							cout << "Avg. bits per item : " << ((float)acf.SizeInBytes()*8/total_items) << endl;
 							cout << "===========================================\n";
 
