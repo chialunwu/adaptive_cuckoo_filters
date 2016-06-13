@@ -150,6 +150,15 @@ public:
 				cur_mem += filter[i]->SizeInBytes();
 			}
 
+			// test
+			/*cout << "test: \n";
+			cout << "0: " << filter[0]->num_buckets << endl;
+			cout << "1: " << filter[1]->num_buckets << endl;
+			filter[1] = new CuckooFilter<ItemType, 32> (single_cf_size*3, false, false);
+			cout << "0: " << filter[0]->num_buckets << endl;
+			cout << "1: " << filter[1]->num_buckets << endl;
+			*/
+			// end test
 /*			cout << SizeInBytes() << endl;
 			for(size_t i=0; i<max_filters; i++){
 				delete filter[i];
@@ -432,9 +441,13 @@ public:
 		lookup[*hash1]++;
 		all_lookup++;
 		if (filter[*hash1] != NULL) {
+//cout<<"Lookup: "<<*hash1<<" - "<<filter[*hash1]->num_buckets<<endl;
+//cout << " nitem: " << filter[*hash1]->num_items << endl;
+//cout << " nbucket: " << filter[*hash1]->num_buckets << endl;
+//cout << " finger: " << filter[*hash1]->fingerprint_size << endl;
+
 			*status = filter[*hash1]->Contain(index, tag, r_index);
 //cout << "2\n";
-//cout<<"Lookup: "<<index<<"/"<<tag<<" "<<*status<<endl;
 			if (*status == cuckoofilter::Ok) {
 				return Found;
 			}else if (*status == cuckoofilter::NotSure) {
@@ -472,6 +485,7 @@ public:
 	Status
 	AdaptiveCuckooFilters<ItemType, NCType, nc_buckets, bits_per_tag>::
 		AdaptToFalsePositive(const ItemType& item, const size_t status, const uint32_t hash1, const size_t r_index, const size_t nc_hash) {
+//cout << "adapt: " << hash1 << endl;
 		fpp[hash1]++;
 		overall_fpp++;
 
@@ -483,7 +497,6 @@ public:
 				InsertNC(nc_hash, item);
 			}
 		}
-
 		//TODO: when to trigger rebuild
 		// Algorithm 1
 
@@ -567,15 +580,16 @@ public:
 					 >= filter[idx]->num_items*4) {
 					//cout << "Grow Fingerprint\n";
 					fingerprint_size += 4;
+					if(fingerprint_size > 32) fingerprint_size = 32;
 					new_size = filter[idx]->num_buckets;
 				}else{
-					size_t optimal_new_size = IncrementalOptimalFilterSize(idx, fingerprint_size);
+					//size_t optimal_new_size = IncrementalOptimalFilterSize(idx, fingerprint_size);
 	
 					new_size = filter[idx]->num_buckets+grow_shrink_bucket;
-					if(false && optimal_new_size > filter[idx]->num_buckets) {
+					/*if(false && optimal_new_size > filter[idx]->num_buckets) {
 						new_size = optimal_new_size;
 						cout << "opt: " << optimal_new_size << " ori: " << filter[idx]->num_buckets << endl;
-					}
+					}*/
 				}
 				force = true;
 			}else{
@@ -597,6 +611,7 @@ public:
 			new_size = single_cf_size;
 		}
 
+		//cout << "fingerprint: " << fingerprint_size << endl;
 		switch(fingerprint_size){
 			case 4:
 				filter[idx] = new CuckooFilter<ItemType, 4> (new_size, force, overlap_mode);
@@ -609,6 +624,15 @@ public:
 				break;
 			case 16:
 				filter[idx] = new CuckooFilter<ItemType, 16> (new_size, force, overlap_mode);
+				break;
+			case 20:
+				filter[idx] = new CuckooFilter<ItemType, 20> (new_size, force, overlap_mode);
+				break;
+			case 24:
+				filter[idx] = new CuckooFilter<ItemType, 24> (new_size, force, overlap_mode);
+				break;
+			case 28:
+				filter[idx] = new CuckooFilter<ItemType, 28> (new_size, force, overlap_mode);
 				break;
 			case 32:
 				filter[idx] = new CuckooFilter<ItemType, 32> (new_size, force, overlap_mode);
@@ -631,6 +655,7 @@ public:
 		fpp[idx] = 0;
 
 //cout << "Info: Grow filter " << idx << " mem: " << cur_mem << " ,budget: " << mem_budget << endl;
+//cout << "size: " << filter[idx]->SizeInBytes() << " bucket: " << filter[idx]->num_buckets << endl;
 
 		for(size_t i=0; i< keys.size(); i++){
 			dummy_filter->GenerateIndexTagHash(keys[i], item_bytes, nc_type==STRING, &raw_index, &index, &tag);
@@ -721,10 +746,19 @@ public:
 
 		// Algorithm 3
 		new_fp_size = ori_fp_size;
-		new_size = filter[idx]->num_buckets-grow_shrink_bucket;
 		force = true;
+		// Shrink bucket size first
+		if(filter[idx]->num_buckets > grow_shrink_bucket) {
+			//cout << "wow: ";
+			//cout << filter[idx]->num_buckets << "/" << grow_shrink_bucket<< endl;
+			new_size = filter[idx]->num_buckets-grow_shrink_bucket;
+			//cout << new_size << endl;
+		}else{
+			new_size = 0;
+		}
+		// If cannot the bucket size is not shinkable, shrink the fingerprint
 		if(new_size*4 < keys.size()/0.95) {
-			//cout << "Shrink fingerprint\n";
+			//cout << "Shrink fingerprint: " << idx << endl;
 			new_fp_size = ori_fp_size - 4;
 			if(new_fp_size < 4) {
 				new_fp_size = 4;
@@ -763,6 +797,15 @@ public:
 					break;
 				case 16:
 					filter[idx] = new CuckooFilter<ItemType, 16> (new_size, force, overlap_mode);
+					break;
+				case 20:
+					filter[idx] = new CuckooFilter<ItemType, 20> (new_size, force, overlap_mode);
+					break;
+				case 24:
+					filter[idx] = new CuckooFilter<ItemType, 24> (new_size, force, overlap_mode);
+					break;
+				case 28:
+					filter[idx] = new CuckooFilter<ItemType, 28> (new_size, force, overlap_mode);
 					break;
 				case 32:
 					filter[idx] = new CuckooFilter<ItemType, 32> (new_size, force, overlap_mode);
@@ -805,6 +848,7 @@ public:
 
 		// Update stats
 		fpp[idx] = 0;
+//cout << "YO: " << cur_mem << endl;
 		cur_mem += filter[idx]->SizeInBytes();
 
 //cout << "Info: Shrink filter " << idx << " mem: " << cur_mem << " ,budget: " << mem_budget << endl;
@@ -951,6 +995,15 @@ public:
 						case 16:
 							filter[i] = new CuckooFilter<ItemType, 16> (bs[i], true, false);
 							break;
+						case 20:
+							filter[i] = new CuckooFilter<ItemType, 20> (bs[i], true, false);
+							break;
+						case 24:
+							filter[i] = new CuckooFilter<ItemType, 24> (bs[i], true, false);
+							break;
+						case 28:
+							filter[i] = new CuckooFilter<ItemType, 28> (bs[i], true, false);
+							break;
 						case 32:
 							filter[i] = new CuckooFilter<ItemType, 32> (bs[i], true, false);
 							break;
@@ -994,8 +1047,7 @@ public:
 		}*/
 
 		cout << "Adaptive Cuckoo Filters Status:\n"
-			<< "Size: " << SizeInBytes() << " bytes\n"
-			<< "Filter size: " << FilterSizeInBytes() << " bytes\n"
+			<< "Filter size: " << SizeInBytes() << " bytes\n"
 			<< "Overhead: " << 100*(float)FixedSizeInBytes()/(FilterSizeInBytes()+FixedSizeInBytes()) << " %" << endl
 			<< "Filters: " << max_filters << endl << endl
 			<< "Insert: " << num_insert << endl
@@ -1050,6 +1102,7 @@ public:
 			}
 
 			if(idx == -1) {
+				// If all the filters's fingerprint have been shrink, reset it.
 				for(uint32_t i=0;i<max_filters;i++)
 					if(shrink_end[i] == true)
 						shrink_end[i] = false;

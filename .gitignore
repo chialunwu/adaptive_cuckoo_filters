@@ -17,12 +17,5 @@ test
 output/
 paper_result/
 
-test_big_cf
-test_big_cf_int
-test_busc
-test_ori
-test_yo
-test_split_cf_adaptive
-test_split_cf_adaptive_ori
-test_split_cf_adaptive_int
-test_split_cf_adaptive_int_ori
+test_*
+acf.*

@@ -204,7 +204,7 @@ int main(int argc, char** argv) {
 	cout << "false positive rate : "
 			  << 100.0 * false_queries / (false_queries + true_negative)
 			  << "%\n\n";
-
+	cout << "Filter size: " << filter.SizeInBytes() << " bytes\n";
 	cout << "Inserted items : " << num_inserted << '\n';
 	cout << "Total queries : " << total_queries << '\n';
 	cout << "True negative : " << true_negative << '\n';

@@ -178,7 +178,7 @@ if len(sys.argv) != 5:
 else:
 	total_items = int(sys.argv[1])
 	total_lookup = int(sys.argv[2])
-	total_bytes = int(sys.argv[3])
+	total_bytes = int(sys.argv[3]) + 3000 # Compensate the lost bits...
 	fname = sys.argv[4]
 ##############################################################################
 sbf = SplitBloomFilter(num_filters, total_bytes*8, total_items)

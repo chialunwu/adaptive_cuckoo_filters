@@ -13,7 +13,7 @@
 using cuckoofilter::CuckooFilter;
 
 int main(int argc, char** argv) {
-    size_t total_items  = 1000000;
+    size_t total_items  = 100000000;
     size_t sht_max_buckets = 0;
 
     // Timing
@@ -23,6 +23,7 @@ int main(int argc, char** argv) {
 
     uint32_t hash1=0;
 
+	const size_t bits_per_tag = 28;
     // Create a cuckoo filter where each item is of type size_t and
     // use 12 bits for each item:
     //    CuckooFilter<size_t, 12> filter(total_items);
@@ -31,7 +32,8 @@ int main(int argc, char** argv) {
     // for each key:
     //   CuckooFilter<size_t, 13, cuckoofilter::PackedTable> filter(total_items);
 
-    CuckooFilter<size_t, 8> filter(total_items/0.95/4, true);
+    CuckooFilter<size_t, bits_per_tag> filter(total_items/0.95/4, true, false);
+	cout << "Theory error rate: " << 100*(2.0*total_items/(filter.num_buckets*pow(2, bits_per_tag))) << " %\n";
     cout << "filter size: " << filter.SizeInBytes() << endl;
 
     // Small hash table storing true negative caused by false positive
@@ -62,6 +64,7 @@ int main(int argc, char** argv) {
 	uint32_t index, tag;
 
         filter.GenerateIndexTagHash(i, 4, false, &raw_index, &index, &tag);
+	//printf("Read tag: %x\n", filter.TagHash(tag));
         assert(filter.Contain(index, tag, &r_index) == cuckoofilter::Ok);
     }
 

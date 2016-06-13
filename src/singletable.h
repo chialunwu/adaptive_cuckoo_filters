@@ -50,7 +50,10 @@ namespace cuckoofilter {
 			memset(buckets_, 0, (bytes_per_bucket+1) * num_buckets);
 		}
 
-		size_t SizeInBytes() const { return bytes_per_bucket * num_buckets; }
+		size_t SizeInBytes() const { 
+			// Filter bucket + extra bits (for altindex, negative cache)
+			return bytes_per_bucket * num_buckets + (5*num_buckets/8); 
+		}
 
 		size_t SizeInTags() const { return tags_per_bucket * num_buckets; }
 

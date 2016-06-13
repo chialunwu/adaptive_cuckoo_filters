@@ -31,8 +31,8 @@ namespace cuckoofilter {
 	
 	class CuckooFilterInterface {
 public:
-			// Number of items stored
-			size_t  num_items;
+		// Number of items stored
+		size_t  num_items;
 
 		size_t num_buckets;
 		size_t fingerprint_size;
@@ -135,7 +135,6 @@ public:
 			// index ^ HashUtil::BobHash((const void*) (&tag), 4)) & table_->INDEXMASK;
 			// now doing a quick-n-dirty way:
 			// 0x5bd1e995 is the hash constant from MurmurHash2
-			size_t num_buckets = table_->num_buckets;
 			if (!is_alt) {
 				return (uint32_t)((index + (tag * 0x5bd1e995)) % num_buckets);
 			}else{
