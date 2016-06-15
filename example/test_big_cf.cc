@@ -41,7 +41,7 @@ void usage(char *argv0) {
 int main(int argc, char** argv) {
 	size_t sht_max_buckets = 0;
 	size_t mem_budget = 270000;
-	const size_t bits_per_tag = 8;
+	const size_t bits_per_tag = 12;
 	size_t total_items = 168093;
 	size_t total_lookup = 5000000;
 	size_t rebuild_period = 100000;
@@ -78,7 +78,7 @@ int main(int argc, char** argv) {
 
 	CuckooFilter<char[256], bits_per_tag> filter(filter_size, force, false);
 	cout << "Theory error rate: " << 100*(2.0*total_items/(filter.num_buckets*pow(2, bits_per_tag))) << " %\n";
-	cout << "Initial filter size: " << filter.SizeInBytes() << " bytes\n";
+	cout << "Initial filter size: " << filter.SizeInBytes()-5*filter.num_buckets/8 << " bytes\n";
 	cout << "Avg. bits per item : " << ((float)filter.SizeInBytes()*8/total_items) << endl;
 	cout << "===========================================\n";
 

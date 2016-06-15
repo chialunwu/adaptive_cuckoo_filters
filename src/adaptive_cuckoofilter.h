@@ -67,7 +67,7 @@ namespace adaptive_cuckoofilters {
 		size_t *insert_keys_old;
 		bool *shrink_end;
 
-		size_t overall_fpp, all_lookup;
+		size_t overall_fpp, all_lookup, overall_fpp2;
 		size_t  num_grow, num_shrink, true_neg;
 		size_t NC_hit;
 
@@ -376,6 +376,11 @@ public:
 			}
 		}
 
+		void ClearCounter(size_t i) {
+			lookup[i] = 1;
+			fpp[i] = 0;
+		}
+
 		void ClearAllCounter() {
 			for(size_t i=0;i<max_filters;i++) {
 				lookup[i] = 0;
@@ -507,17 +512,20 @@ public:
 			target_fpp = 1.0;
 		float true_fpp = (float)fpp[hash1]/lookup[hash1];
 
-//		if (target_fpp == 1.0 || true_fpp > target_fpp) {
-//		if(fpp[hash1] > 
-		if(fpp[hash1] > grow_threshold){
+		if (target_fpp == 1.0 || (true_fpp > target_fpp*5 && lookup[hash1] > 50)) {
+//		if(fpp[hash1] > grow_threshold){
+//			cout << "target: " << target_fpp << " true: " << true_fpp << " lookup: " << lookup[hash1] << endl;
+
 //			cout << "true_fpp: " << true_fpp << " target_fpp: " << target_fpp << endl;
 			return NeedRebuild;
+		}else{
+//			cout << "!target: " << target_fpp << " true: " << true_fpp << " lookup: " << lookup[hash1] << endl;
 		}
 
 		// Algorithm 2
 /*		float true_fpp = (float)fpp[hash1]/overall_fpp;
 		float target_fpp = (float)(2*filter[hash1]->num_items)/(filter[hash1]->num_buckets*pow(2, filter[hash1]->fingerprint_size));
-		float bound = 0.01;
+		float bound = 1.01;
 		if(true_fpp > (target_fpp + bound)){
 //			return NeedRebuild;
 		}*/
@@ -549,7 +557,7 @@ public:
 				new_size = single_cf_size*(rebuild_time[idx]+1);
 			}while(new_size < filter[idx]->num_items);
 */
-
+			fingerprint_size = filter[idx]->fingerprint_size;
 			if(!grow_bucket) {
 				num_grow ++;
 				// Algorithm 1
@@ -575,7 +583,6 @@ public:
 
 */
 				// Algorithm 2
-				fingerprint_size = filter[idx]->fingerprint_size;
 				if((filter[idx]->num_buckets*4 - filter[idx]->num_items)*filter[idx]->fingerprint_size
 					 >= filter[idx]->num_items*4) {
 					//cout << "Grow Fingerprint\n";
@@ -652,7 +659,8 @@ public:
 		assert(new_mem >= ori_mem);
 
 		cur_mem += filter[idx]->SizeInBytes();;
-		fpp[idx] = 0;
+		
+		ClearCounter(idx);
 
 //cout << "Info: Grow filter " << idx << " mem: " << cur_mem << " ,budget: " << mem_budget << endl;
 //cout << "size: " << filter[idx]->SizeInBytes() << " bucket: " << filter[idx]->num_buckets << endl;
@@ -784,77 +792,77 @@ public:
 			overlap_mode = true;
 
 		ClearFilter(idx);
-		while(true) {
-			switch(new_fp_size){
-				case 4:
-					filter[idx] = new CuckooFilter<ItemType, 4> (new_size, force, overlap_mode);
-					break;
-				case 8:
-					filter[idx] = new CuckooFilter<ItemType, 8> (new_size, force, overlap_mode);
-					break;
-				case 12:
-					filter[idx] = new CuckooFilter<ItemType, 12> (new_size, force, overlap_mode);
-					break;
-				case 16:
-					filter[idx] = new CuckooFilter<ItemType, 16> (new_size, force, overlap_mode);
-					break;
-				case 20:
-					filter[idx] = new CuckooFilter<ItemType, 20> (new_size, force, overlap_mode);
-					break;
-				case 24:
-					filter[idx] = new CuckooFilter<ItemType, 24> (new_size, force, overlap_mode);
-					break;
-				case 28:
-					filter[idx] = new CuckooFilter<ItemType, 28> (new_size, force, overlap_mode);
-					break;
-				case 32:
-					filter[idx] = new CuckooFilter<ItemType, 32> (new_size, force, overlap_mode);
-					break;
-				default:
-					assert(false);
-			}
-			new_mem = filter[idx]->SizeInBytes();
-
+		if(new_size > 0) {
+			while(true) {
+				switch(new_fp_size){
+					case 4:
+						filter[idx] = new CuckooFilter<ItemType, 4> (new_size, force, overlap_mode);
+						break;
+					case 8:
+						filter[idx] = new CuckooFilter<ItemType, 8> (new_size, force, overlap_mode);
+						break;
+					case 12:
+						filter[idx] = new CuckooFilter<ItemType, 12> (new_size, force, overlap_mode);
+						break;
+					case 16:
+						filter[idx] = new CuckooFilter<ItemType, 16> (new_size, force, overlap_mode);
+						break;
+					case 20:
+						filter[idx] = new CuckooFilter<ItemType, 20> (new_size, force, overlap_mode);
+						break;
+					case 24:
+						filter[idx] = new CuckooFilter<ItemType, 24> (new_size, force, overlap_mode);
+						break;
+					case 28:
+						filter[idx] = new CuckooFilter<ItemType, 28> (new_size, force, overlap_mode);
+						break;
+					case 32:
+						filter[idx] = new CuckooFilter<ItemType, 32> (new_size, force, overlap_mode);
+						break;
+					default:
+						assert(false);
+				}
+				new_mem = filter[idx]->SizeInBytes();
+	
 //cout << "new filter: " << idx << endl;
 //cout << new_size << endl;
 //cout << "ori_fp: "<<ori_fp_size<<" new_fp: "<<new_fp_size<<endl;
 //cout << "new_mem: " << new_mem << " ori_mem: " << ori_mem << endl;
 //			assert(new_mem <= ori_mem);
-			for(size_t i=0; i< keys.size(); i++){
-				dummy_filter->GenerateIndexTagHash(keys[i], item_bytes, nc_type==STRING, &raw_index, &index, &tag);
-				if (filter[idx]->Add(index, tag) != cuckoofilter::Ok) {
-					// TODO: the break will cause false negative now!
-					if(evil_shrink)
-						break;
+				for(size_t i=0; i< keys.size(); i++){
+					dummy_filter->GenerateIndexTagHash(keys[i], item_bytes, nc_type==STRING, &raw_index, &index, &tag);
+					if (filter[idx]->Add(index, tag) != cuckoofilter::Ok) {
+						// TODO: the break will cause false negative now!
+						if(evil_shrink)
+							break;
 
 					 // Just delete the filter
 					//cout<< "Shrink fail: "<<idx<<endl;
 					//cout << "Bucket: "<<filter[idx]->num_buckets << " Keys:" << keys.size() << endl;
 					//assert(false);
-					delete filter[idx];
-					filter[idx] = NULL;
-					new_mem = 0;
+						delete filter[idx];
+						filter[idx] = NULL;
+						new_mem = 0;
+						break;
+					}
+				}
+
+				if(filter[idx] != NULL) {
 					break;
+				} else {
+					new_size = ceil(new_size/0.9);
+//				cout << "Try again, cur_mem: " << cur_mem << endl;
 				}
 			}
 
-			if(filter[idx] != NULL) {
-				break;
-			} else {
-				new_size = ceil(new_size/0.9);
-//				cout << "Try again, cur_mem: " << cur_mem << endl;
-			}
+//cout << "YO: " << new_size << endl;
+			cur_mem += filter[idx]->SizeInBytes();
 		}
-
-		// Update stats
-		fpp[idx] = 0;
-//cout << "YO: " << cur_mem << endl;
-		cur_mem += filter[idx]->SizeInBytes();
-
+		ClearCounter(idx);
 //cout << "Info: Shrink filter " << idx << " mem: " << cur_mem << " ,budget: " << mem_budget << endl;
 //cout << "ori_mem: "<<ori_mem<<" new_mem: "<<new_mem<<endl;
 
-//cout << "Shrink - cur_mem: " << cur_mem  << " budget: " << mem_budget << endl;
+//cout << "Shrink - bucket: " << filter[idx]->num_buckets << endl;
 
 
 		if(cur_mem*1.1 > mem_budget)

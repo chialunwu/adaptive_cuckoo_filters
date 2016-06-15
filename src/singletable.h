@@ -52,7 +52,7 @@ namespace cuckoofilter {
 
 		size_t SizeInBytes() const { 
 			// Filter bucket + extra bits (for altindex, negative cache)
-			return bytes_per_bucket * num_buckets + (5*num_buckets/8); 
+			return bytes_per_bucket * num_buckets + (1*num_buckets/8); 
 		}
 
 		size_t SizeInTags() const { return tags_per_bucket * num_buckets; }
